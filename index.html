@@ -26,7 +26,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script>
-const { Engine, Render, Runner, World, Bodies, Body, Mouse, MouseConstraint, Composite } = Matter;
+const { Engine, Render, Runner, World, Bodies, Body, Mouse, MouseConstraint, Events, Composite } = Matter;
 
 // Engine & world
 const engine = Engine.create();
@@ -46,15 +46,16 @@ Render.run(render);
 Runner.run(Runner.create(), engine);
 
 // Walls
+const floorHeight = 100;
 const walls = [
-    Bodies.rectangle(canvas.width/2, canvas.height+50, canvas.width, 100, { isStatic: true }),
+    Bodies.rectangle(canvas.width/2, canvas.height + floorHeight/2, canvas.width, floorHeight, { isStatic: true }),
     Bodies.rectangle(canvas.width/2, -50, canvas.width, 100, { isStatic: true }),
     Bodies.rectangle(-50, canvas.height/2, 100, canvas.height, { isStatic: true }),
     Bodies.rectangle(canvas.width+50, canvas.height/2, 100, canvas.height, { isStatic: true })
 ];
 World.add(world, walls);
 
-// Draggable mouse
+// Mouse
 const mouse = Mouse.create(canvas);
 const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
 World.add(world, mouseConstraint);
@@ -62,7 +63,7 @@ World.add(world, mouseConstraint);
 // Keep track of ramps
 const ramps = [];
 
-// Spawn function
+// Spawn shapes
 function spawn(type) {
     const x = Math.random() * (canvas.width - 100) + 50;
     const y = 50;
@@ -71,15 +72,16 @@ function spawn(type) {
     else if (type === 'square') body = Bodies.rectangle(x, y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } });
     else if (type === 'ramp') {
         const widthRamp = 200, heightRamp = 20;
-        const angle = 25 * Math.PI / 180; // 25 degrees in radians
+        const angle = 25 * Math.PI / 180;
         body = Bodies.rectangle(x, y+100, widthRamp, heightRamp, { 
             mass: 1000, 
-            friction: 0.8, 
+            friction: 1, 
             restitution: 0.1,
             angle: angle, 
-            render: { fillStyle: '#2ecc71' }
+            render: { fillStyle: '#2ecc71' },
+            plugin: { onFloor: false }
         });
-        ramps.push(body); // add ramp to array
+        ramps.push(body);
     }
     World.add(world, body);
 }
@@ -102,12 +104,21 @@ function resetWorld() {
     ramps.length = 0;
 }
 
-// Keep ramps at 25 degrees
-Matter.Events.on(engine, 'beforeUpdate', () => {
+// Keep ramps at 25 degrees and floor-lock
+Events.on(engine, 'beforeUpdate', () => {
     const fixedAngle = 25 * Math.PI / 180;
+
     ramps.forEach(ramp => {
+        // Maintain angle
         Body.setAngle(ramp, fixedAngle);
-        ramp.angularVelocity = 0; // stop spinning
+        ramp.angularVelocity = 0;
+
+        // Detect if ramp is on the floor (simple approximation)
+        const floorY = canvas.height - floorHeight/2;
+        if (ramp.position.y + ramp.bounds.max.y - ramp.position.y >= floorY - 1 && !mouseConstraint.body || mouseConstraint.body !== ramp) {
+            Body.setVelocity(ramp, { x: 0, y: 0 });
+            Body.setPosition(ramp, { x: ramp.position.x, y: floorY - (ramp.bounds.max.y - ramp.position.y) });
+        }
     });
 });
 
@@ -115,7 +126,7 @@ Matter.Events.on(engine, 'beforeUpdate', () => {
 window.addEventListener('resize', () => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    Body.setPosition(walls[0], { x: canvas.width/2, y: canvas.height+50 });
+    Body.setPosition(walls[0], { x: canvas.width/2, y: canvas.height + floorHeight/2 });
     Body.setPosition(walls[1], { x: canvas.width/2, y: -50 });
     Body.setPosition(walls[2], { x: -50, y: canvas.height/2 });
     Body.setPosition(walls[3], { x: canvas.width+50, y: canvas.height/2 });
