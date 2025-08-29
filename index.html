@@ -3,244 +3,95 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>New Blocks</title>
+<title>Physics Sandbox</title>
 <style>
-html, body { margin:0; padding:0; overflow:hidden; font-family: Arial; background:#f0f8ff; }
-#toolbar { margin:5px; display:flex; flex-wrap:wrap; gap:5px; }
-button, input[type=range] { margin:5px; padding:6px 12px; border:none; border-radius:5px; background:#007bff; color:white; cursor:pointer; }
-button:hover { background:#0056b3; }
-canvas { border:2px solid #007bff; display:block; margin:0 auto; background:white; }
+  body { margin: 0; overflow: hidden; background: #111; color: #fff; font-family: sans-serif; }
+  #ui {
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px;
+  }
+  button, input { margin: 5px; padding: 5px; }
 </style>
 </head>
 <body>
-
-<div id="toolbar">
-  <button onclick="spawnBlock('rect')">Rectangle</button>
-  <button onclick="spawnBlock('circle')">Circle</button>
-  <button onclick="spawnRod()">Rod</button>
-  <button onclick="resetCanvas()">Reset</button>
-  <label>Gravity: <span id="gravityVal">9.8</span></label>
-  <input type="range" id="gravitySlider" min="1" max="20" step="0.1" value="9.8" oninput="setGravity(this.value)">
-  <button onclick="togglePause()">Pause/Unpause</button>
+<canvas id="world"></canvas>
+<div id="ui">
+  <button onclick="spawn('circle')">Spawn Circle</button>
+  <button onclick="spawn('square')">Spawn Square</button>
+  <button onclick="toggleGravity()">Pause/Play Gravity</button>
+  <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1" onchange="updateGravity(this.value)"></label>
 </div>
 
-<canvas id="playground" width="900" height="500"></canvas>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script>
-const canvas = document.getElementById('playground');
-const ctx = canvas.getContext('2d');
-let blocks = [];
-let rods = [];
-let paused = false;
-let gravity = 9.8;
-let lastTime = performance.now();
+const { Engine, Render, Runner, World, Bodies, Body } = Matter;
 
-document.getElementById('gravitySlider').addEventListener('input', e=>{
-  gravity = parseFloat(e.target.value);
-  document.getElementById('gravityVal').textContent = gravity;
+// Create engine and world
+const engine = Engine.create();
+const world = engine.world;
+
+// Renderer
+const canvas = document.getElementById('world');
+const width = window.innerWidth;
+const height = window.innerHeight;
+canvas.width = width;
+canvas.height = height;
+
+const render = Render.create({
+    canvas,
+    engine,
+    options: {
+        wireframes: false,
+        background: '#111',
+        width,
+        height,
+    }
 });
 
-const friction = 0.99;
-const bounce = 0.6;
+Render.run(render);
+const runner = Runner.create();
+Runner.run(runner, engine);
 
-// --- Classes ---
-class Block {
-  constructor(type,x,y){
-    this.type=type;
-    this.width=60;
-    this.height=60;
-    this.radius=30;
-    this.x=x;
-    this.y=y;
-    this.vx=0;
-    this.vy=0;
-    this.color='#'+Math.floor(Math.random()*16777215).toString(16);
-    this.mass = (type==='circle') ? Math.PI*this.radius*this.radius/100 : this.width*this.height/100;
-    this.dragging=false;
-  }
+// Ground & walls
+const walls = [
+    Bodies.rectangle(width/2, height+50, width, 100, { isStatic: true }),
+    Bodies.rectangle(width/2, -50, width, 100, { isStatic: true }),
+    Bodies.rectangle(-50, height/2, 100, height, { isStatic: true }),
+    Bodies.rectangle(width+50, height/2, 100, height, { isStatic: true })
+];
+World.add(world, walls);
 
-  draw(){
-    ctx.fillStyle=this.color;
-    if(this.type==='rect') ctx.fillRect(this.x,this.y,this.width,this.height);
-    else if(this.type==='circle'){ ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fill(); }
-  }
-
-  update(dt){
-    if(this.dragging || paused) return;
-    this.vy += gravity*dt;
-    this.vx *= friction;
-    this.vy *= friction;
-    this.x += this.vx;
-    this.y += this.vy;
-
-    // Wall collisions
-    if(this.x<0){ this.x=0; this.vx*=-bounce; }
-    if(this.type==='rect' && this.x+this.width>canvas.width){ this.x=canvas.width-this.width; this.vx*=-bounce; }
-    if(this.type==='circle' && this.x+this.radius>canvas.width){ this.x=canvas.width-this.radius; this.vx*=-bounce; }
-
-    // Floor collisions
-    if(this.type==='rect' && this.y+this.height>canvas.height){ this.y=canvas.height-this.height; this.vy*=-bounce; }
-    if(this.type==='circle' && this.y+this.radius>canvas.height){ this.y=canvas.height-this.radius; this.vy*=-bounce; }
-
-    // Rod collisions
-    rods.forEach(rod=>{
-      resolveRod(obj=this, rod);
-    });
-  }
-}
-
-class Rod {
-  constructor(x,y,length=200){
-    this.x=x;
-    this.y=y;
-    this.length=length;
-    this.height=15;
-    this.color="#ff4500";
-    this.dragging=false;
-    this.resizing=false;
-  }
-
-  draw(){
-    ctx.fillStyle=this.color;
-    ctx.fillRect(this.x,this.y,this.length,this.height);
-  }
-}
-
-// --- Spawning ---
-function spawnBlock(type){
-  let x=50 + Math.random()*(canvas.width-150);
-  let y=50 + Math.random()*(canvas.height-150);
-  blocks.push(new Block(type,x,y));
-}
-
-function spawnRod(){
-  let x=50 + Math.random()*(canvas.width-250);
-  let y=50 + Math.random()*(canvas.height-100);
-  rods.push(new Rod(x,y));
-}
-
-// --- Controls ---
-function togglePause(){ paused=!paused; }
-function resetCanvas(){ blocks=[]; rods=[]; }
-function setGravity(val){ gravity=parseFloat(val); document.getElementById('gravityVal').textContent=gravity; }
-
-// --- Collisions ---
-function resolveCircleCircle(a,b){
-  let dx=b.x-a.x, dy=b.y-a.y;
-  let dist=Math.sqrt(dx*dx+dy*dy);
-  let minDist=a.radius+b.radius;
-  if(dist<minDist){
-    let nx=dx/dist||0, ny=dy/dist||1;
-    let overlap=minDist-dist;
-    let totalMass = a.mass+b.mass;
-    a.x -= nx*overlap*(b.mass/totalMass); a.y -= ny*overlap*(b.mass/totalMass);
-    b.x += nx*overlap*(a.mass/totalMass); b.y += ny*overlap*(a.mass/totalMass);
-    let relVel = (b.vx-a.vx)*nx + (b.vy-a.vy)*ny;
-    if(relVel>0) return;
-    let impulse = -(1+bounce)*relVel/(1/a.mass+1/b.mass);
-    a.vx -= impulse*nx/a.mass; a.vy -= impulse*ny/a.mass;
-    b.vx += impulse*nx/b.mass; b.vy += impulse*ny/b.mass;
-  }
-}
-
-function resolveRectRect(a,b){
-  if(a.x<a.x+b.width && a.x+a.width>b.x && a.y<a.y+b.height && a.y+a.height>b.y){
-    let overlapX = Math.min(a.x+a.width-b.x,b.x+b.width-a.x);
-    let overlapY = Math.min(a.y+a.height-b.y,b.y+b.height-a.y);
-    if(overlapX<overlapY){
-      if(a.x<b.x) a.x-=overlapX; else a.x+=overlapX;
-      [a.vx,b.vx] = [b.vx,a.vx];
+function spawn(type) {
+    const x = Math.random() * (width - 100) + 50;
+    const y = 50;
+    let body;
+    if (type === 'circle') {
+        body = Bodies.circle(x, y, 30, { restitution: 0.7 });
     } else {
-      if(a.y<b.y) a.y-=overlapY; else a.y+=overlapY;
-      [a.vy,b.vy] = [b.vy*a.bounce,a.vy*b.bounce];
+        body = Bodies.rectangle(x, y, 60, 60, { restitution: 0.7 });
     }
-  }
+    World.add(world, body);
 }
 
-function resolveCircleRect(circle,rect){
-  let nearestX = Math.max(rect.x, Math.min(circle.x, rect.x+rect.width));
-  let nearestY = Math.max(rect.y, Math.min(circle.y, rect.y+rect.height));
-  let dx = circle.x-nearestX, dy = circle.y-nearestY;
-  let dist = Math.sqrt(dx*dx+dy*dy);
-  if(dist<circle.radius){
-    let nx=dx/dist||0, ny=dy/dist||1;
-    let overlap = circle.radius-dist;
-    circle.x+=nx*overlap; circle.y+=ny*overlap;
-    circle.vx*=0.7; circle.vy*=0.7;
-  }
+// Gravity control
+let gravityEnabled = true;
+function toggleGravity() {
+    gravityEnabled = !gravityEnabled;
+    engine.world.gravity.y = gravityEnabled ? parseFloat(document.getElementById('gravitySlider').value) : 0;
+}
+function updateGravity(value) {
+    if (gravityEnabled) engine.world.gravity.y = parseFloat(value);
 }
 
-function resolveRod(obj, rod){
-  let objBottom = (obj.type==='circle') ? obj.y+obj.radius : obj.y+obj.height;
-  let objTop = (obj.type==='circle') ? obj.y-obj.radius : obj.y;
-  let objRight = (obj.type==='circle') ? obj.x+obj.radius : obj.x+obj.width;
-  let objLeft = (obj.type==='circle') ? obj.x-obj.radius : obj.x;
-  if(objBottom>rod.y && objTop<rod.y+rod.height && objRight>rod.x && objLeft<rod.x+rod.length){
-    obj.vy=0;
-    obj.y=rod.y - (obj.type==='circle' ? obj.radius : obj.height);
-  }
-}
-
-// --- Drag & Resize ---
-let selected=null, offsetX=0, offsetY=0;
-canvas.addEventListener('mousedown', e=>{
-  const mx=e.offsetX,my=e.offsetY;
-  for(let i=blocks.length-1;i>=0;i--){
-    const b=blocks[i];
-    let hit=false;
-    if(b.type==='rect') hit=mx>b.x && mx<b.x+b.width && my>b.y && my<b.y+b.height;
-    if(b.type==='circle') hit=(mx-b.x)**2+(my-b.y)**2<b.radius**2;
-    if(hit){ selected=b; b.dragging=true; offsetX=mx-b.x; offsetY=my-b.y; return; }
-  }
-  for(let i=rods.length-1;i>=0;i--){
-    const r=rods[i];
-    if(mx>r.x && mx<r.x+r.length && my>r.y && my<r.y+r.height){
-      selected=r;
-      r.dragging=true;
-      offsetX=mx-r.x;
-      offsetY=my-r.y;
-      return;
-    }
-  }
+// Resize canvas & walls dynamically
+window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    Body.setPosition(walls[0], { x: window.innerWidth/2, y: window.innerHeight+50 });
+    Body.setPosition(walls[1], { x: window.innerWidth/2, y: -50 });
+    Body.setPosition(walls[2], { x: -50, y: window.innerHeight/2 });
+    Body.setPosition(walls[3], { x: window.innerWidth+50, y: window.innerHeight/2 });
 });
-canvas.addEventListener('mousemove', e=>{
-  if(selected){
-    if(selected.dragging){
-      selected.x=e.offsetX-offsetX;
-      selected.y=e.offsetY-offsetY;
-    }
-  }
-});
-canvas.addEventListener('mouseup', e=>{
-  if(selected) selected.dragging=false;
-  selected=null;
-});
-
-// --- Animate ---
-function handleCollisions(){
-  for(let i=0;i<blocks.length;i++){
-    for(let j=i+1;j<blocks.length;j++){
-      const a=blocks[i], b=blocks[j];
-      if(a.dragging || b.dragging) continue;
-      if(a.type==='circle' && b.type==='circle') resolveCircleCircle(a,b);
-      if(a.type==='rect' && b.type==='rect') resolveRectRect(a,b);
-      if(a.type==='circle' && b.type==='rect') resolveCircleRect(a,b);
-      if(a.type==='rect' && b.type==='circle') resolveCircleRect(b,a);
-    }
-  }
-}
-
-function animate(time){
-  let dt = (time-lastTime)/1000;
-  lastTime=time;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  handleCollisions();
-  blocks.forEach(b=>b.update(dt));
-  blocks.forEach(b=>b.draw());
-  rods.forEach(r=>r.draw());
-  requestAnimationFrame(animate);
-}
-requestAnimationFrame(animate);
 </script>
 </body>
 </html>
