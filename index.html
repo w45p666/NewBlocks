@@ -28,23 +28,19 @@
 <canvas id="playground" width="900" height="500"></canvas>
 
 <script>
-// Canvas setup
 const canvas = document.getElementById('playground');
 const ctx = canvas.getContext('2d');
 let blocks = [];
 let paused = false;
 let gravity = 0.5;
+const friction = 0.99;
+const bounce = 0.6;
 
 document.getElementById('gravitySlider').addEventListener('input', e=>{
   gravity = parseFloat(e.target.value);
   document.getElementById('gravityVal').textContent = gravity;
 });
 
-// Physics parameters
-const friction = 0.98;
-const bounce = 0.6;
-
-// Block class
 class Block{
   constructor(type,x,y){
     this.type=type;
@@ -56,7 +52,6 @@ class Block{
     this.height=60;
     this.radius=30;
     this.color='#'+Math.floor(Math.random()*16777215).toString(16);
-    this.angle=0;
     this.static = type==='ramp';
     this.dragging=false;
   }
@@ -101,22 +96,19 @@ function spawnBlock(type){
   blocks.push(new Block(type,x,y));
 }
 
-// Pause
 function togglePause(){ paused=!paused; }
-
-// Reset
 function resetCanvas(){ blocks=[]; }
-
-// Gravity slider setter
 function setGravity(val){ gravity=parseFloat(val); document.getElementById('gravityVal').textContent=gravity; }
 
-// Simple collision detection and resolution
+// Improved collisions
 function handleCollisions(){
   for(let i=0;i<blocks.length;i++){
     for(let j=i+1;j<blocks.length;j++){
       const a=blocks[i], b=blocks[j];
       if(a.static && b.static) continue;
+      if(a.dragging || b.dragging) continue; // dragged blocks don't move others
 
+      // Circle-Circle collision
       if(a.type==='circle' && b.type==='circle'){
         const dx=b.x-a.x;
         const dy=b.y-a.y;
@@ -124,26 +116,27 @@ function handleCollisions(){
         if(dist<a.radius+b.radius){
           const overlap=a.radius+b.radius-dist;
           const nx=dx/dist, ny=dy/dist;
-          b.x+=nx*overlap/2; b.y+=ny*overlap/2;
-          a.x-=nx*overlap/2; a.y-=ny*overlap/2;
+          if(!a.static) a.x-=nx*overlap/2; a.y-=ny*overlap/2;
+          if(!b.static) b.x+=nx*overlap/2; b.y+=ny*overlap/2;
           const vx=(a.vx+b.vx)/2, vy=(a.vy+b.vy)/2;
-          a.vx=vx; a.vy=vy; b.vx=vx; b.vy=vy;
+          if(!a.static){ a.vx=vx; a.vy=vy; }
+          if(!b.static){ b.vx=vx; b.vy=vy; }
         }
       } else {
-        // Rect-Rect or Rect-Circle simple stacking
+        // Rect-Rect simple stacking
         if(a.x<a.x+a.width && b.x<b.x+b.width && a.y<a.y+a.height && b.y<b.y+b.height){
-          if(a.y<b.y){ a.vy*=-bounce; b.y=a.y+a.height; }
-          else{ b.vy*=-bounce; a.y=b.y+b.height; }
+          if(a.y<b.y){ if(!a.static) a.vy*=-bounce; if(!b.static) b.y=a.y+a.height; }
+          else{ if(!b.static) b.vy*=-bounce; if(!a.static) a.y=b.y+b.height; }
         }
       }
     }
   }
 }
 
-// Drag and drop
+// Drag & drop
 let selected=null, offsetX=0, offsetY=0;
 canvas.addEventListener('mousedown',e=>{
-  const mx=e.offsetX, my=e.offsetY;
+  const mx=e.offsetX,my=e.offsetY;
   for(let i=blocks.length-1;i>=0;i--){
     const b=blocks[i];
     let hit=false;
@@ -156,7 +149,7 @@ canvas.addEventListener('mousedown',e=>{
 canvas.addEventListener('mousemove',e=>{ if(selected){ selected.x=e.offsetX-offsetX; selected.y=e.offsetY-offsetY; } });
 canvas.addEventListener('mouseup',e=>{ if(selected) selected.dragging=false; selected=null; });
 
-// Animation loop
+// Animation
 function animate(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   handleCollisions();
@@ -166,6 +159,5 @@ function animate(){
 }
 animate();
 </script>
-
 </body>
 </html>
