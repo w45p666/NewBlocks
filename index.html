@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>New Blocks</title>
 <style>
-  body { margin:0; font-family: Arial; background:#f0f8ff; display:flex; flex-direction: column; align-items:center; }
-  #toolbar { margin:10px; display:flex; flex-wrap:wrap; gap:5px; }
-  button, input[type=range] { margin:5px; padding:8px 15px; border:none; border-radius:5px; background:#007bff; color:white; cursor:pointer; }
-  button:hover { background:#0056b3; }
-  input[type=range] { padding:0; }
-  canvas { border:2px solid #007bff; background:white; margin-top:10px; }
+body { margin:0; font-family: Arial; background:#f0f8ff; display:flex; flex-direction: column; align-items:center; }
+#toolbar { margin:10px; display:flex; flex-wrap:wrap; gap:5px; }
+button, input[type=range] { margin:5px; padding:8px 15px; border:none; border-radius:5px; background:#007bff; color:white; cursor:pointer; }
+button:hover { background:#0056b3; }
+input[type=range] { padding:0; }
+canvas { border:2px solid #007bff; background:white; margin-top:10px; display:block; }
 </style>
 </head>
 <body>
@@ -40,37 +40,32 @@ document.getElementById('gravitySlider').addEventListener('input', e=>{
   document.getElementById('gravityVal').textContent = gravity;
 });
 
-// Physics constants
 const friction = 0.99;
 const bounce = 0.6;
 
 class Block {
   constructor(type,x,y){
     this.type=type;
-    this.x=x;
-    this.y=y;
-    this.vx=0;
-    this.vy=0;
     this.width=60;
     this.height=60;
     this.radius=30;
+    this.length=120;
+    this.x = Math.min(Math.max(x,0),canvas.width - (type==='circle'?this.radius*2:this.width));
+    this.y = Math.min(Math.max(y,0),canvas.height - (type==='circle'?this.radius*2:this.height));
+    this.vx=0;
+    this.vy=0;
     this.color='#'+Math.floor(Math.random()*16777215).toString(16);
     this.mass = (type==='circle') ? Math.PI*this.radius*this.radius/100 : this.width*this.height/100;
-    this.static = type==='ramp';
+    this.static = false;
     this.dragging=false;
-    this.angle=0; 
-    this.length=120;
+    this.angle=0;
   }
 
   draw(){
     ctx.fillStyle=this.color;
-    if(this.type==='rect'){
-      ctx.fillRect(this.x,this.y,this.width,this.height);
-    } else if(this.type==='circle'){
-      ctx.beginPath();
-      ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
-      ctx.fill();
-    } else if(this.type==='ramp'){
+    if(this.type==='rect') ctx.fillRect(this.x,this.y,this.width,this.height);
+    else if(this.type==='circle'){ ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fill(); }
+    else if(this.type==='ramp'){
       ctx.save();
       ctx.translate(this.x,this.y);
       ctx.rotate(this.angle);
@@ -80,41 +75,39 @@ class Block {
   }
 
   update(dt){
-    if(this.static || this.dragging || paused) return;
-    // Apply gravity
+    if(this.dragging || paused) return;
     this.vy += gravity*dt;
-    // Apply friction
     this.vx *= friction;
     this.vy *= friction;
-    // Update position
     this.x += this.vx;
     this.y += this.vy;
+
     // Wall collisions
     if(this.x<0){ this.x=0; this.vx*=-bounce; }
     if(this.type==='rect' && this.x+this.width>canvas.width){ this.x=canvas.width-this.width; this.vx*=-bounce; }
     if(this.type==='circle' && this.x+this.radius>canvas.width){ this.x=canvas.width-this.radius; this.vx*=-bounce; }
+    if(this.type==='ramp' && this.x+this.length>canvas.width){ this.x=canvas.width-this.length; this.vx*=-bounce; }
+
     // Floor collisions
     if(this.type==='rect' && this.y+this.height>canvas.height){ this.y=canvas.height-this.height; this.vy*=-bounce; }
     if(this.type==='circle' && this.y+this.radius>canvas.height){ this.y=canvas.height-this.radius; this.vy*=-bounce; }
+    if(this.type==='ramp' && this.y+20>canvas.height){ this.y=canvas.height-20; this.vy*=-bounce; }
   }
 }
 
-// Spawn blocks
 function spawnBlock(type){
-  let x = 100 + Math.random()*(canvas.width-200);
-  let y = 50;
+  let x = 50 + Math.random()*(canvas.width-150);
+  let y = 50 + Math.random()*100;
   blocks.push(new Block(type,x,y));
 }
 
-// Pause and reset
 function togglePause(){ paused=!paused; }
 function resetCanvas(){ blocks=[]; }
 function setGravity(val){ gravity=parseFloat(val); document.getElementById('gravityVal').textContent=gravity; }
 
-// Collision helpers
+// Collision resolution
 function resolveCircleCircle(a,b){
-  let dx=b.x-a.x;
-  let dy=b.y-a.y;
+  let dx=b.x-a.x, dy=b.y-a.y;
   let dist=Math.sqrt(dx*dx+dy*dy);
   let minDist=a.radius+b.radius;
   if(dist<minDist){
@@ -123,7 +116,6 @@ function resolveCircleCircle(a,b){
     let totalMass = a.mass+b.mass;
     if(!a.static) { a.x -= nx*overlap*(b.mass/totalMass); a.y -= ny*overlap*(b.mass/totalMass); }
     if(!b.static) { b.x += nx*overlap*(a.mass/totalMass); b.y += ny*overlap*(a.mass/totalMass); }
-    // Velocity update (1D along normal)
     let relVel = (b.vx-a.vx)*nx + (b.vy-a.vy)*ny;
     if(relVel>0) return;
     let impulse = -(1+bounce)*relVel/(1/a.mass+1/b.mass);
@@ -132,7 +124,6 @@ function resolveCircleCircle(a,b){
   }
 }
 
-// Rect-Rect stacking
 function resolveRectRect(a,b){
   if(a.x<a.x+b.width && a.x+a.width>b.x && a.y<a.y+b.height && a.y+a.height>b.y){
     let overlapX = Math.min(a.x+a.width-b.x,b.x+b.width-a.x);
@@ -147,12 +138,10 @@ function resolveRectRect(a,b){
   }
 }
 
-// Circle-Rect collision
 function resolveCircleRect(circle,rect){
   let nearestX = Math.max(rect.x, Math.min(circle.x, rect.x+rect.width));
   let nearestY = Math.max(rect.y, Math.min(circle.y, rect.y+rect.height));
-  let dx = circle.x-nearestX;
-  let dy = circle.y-nearestY;
+  let dx = circle.x-nearestX, dy = circle.y-nearestY;
   let dist = Math.sqrt(dx*dx+dy*dy);
   if(dist<circle.radius){
     let nx=dx/dist||0, ny=dy/dist||1;
@@ -161,7 +150,6 @@ function resolveCircleRect(circle,rect){
   }
 }
 
-// Ramp collision
 function resolveRamp(obj,ramp){
   let rx=ramp.x, ry=ramp.y, angle=ramp.angle, length=ramp.length;
   let sin=Math.sin(angle), cos=Math.cos(angle);
@@ -175,7 +163,7 @@ function resolveRamp(obj,ramp){
   }
 }
 
-// Handle all collisions
+// Handle collisions
 function handleCollisions(){
   for(let i=0;i<blocks.length;i++){
     for(let j=i+1;j<blocks.length;j++){
@@ -189,6 +177,7 @@ function handleCollisions(){
       if(a.type==='rect' && b.type==='ramp') resolveRamp(a,b);
       if(b.type==='circle' && a.type==='ramp') resolveRamp(b,a);
       if(b.type==='rect' && a.type==='ramp') resolveRamp(b,a);
+      if(a.type==='ramp' && b.type==='ramp') resolveRectRect(a,b);
     }
   }
 }
@@ -209,7 +198,7 @@ canvas.addEventListener('mousedown', e=>{
 canvas.addEventListener('mousemove', e=>{ if(selected){ selected.x=e.offsetX-offsetX; selected.y=e.offsetY-offsetY; } });
 canvas.addEventListener('mouseup', e=>{ if(selected) selected.dragging=false; selected=null; });
 
-// Animation
+// Animate
 function animate(time){
   let dt = (time-lastTime)/1000;
   lastTime=time;
