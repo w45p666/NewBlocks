@@ -48,7 +48,8 @@ class Block {
     this.width=60;
     this.height=60;
     this.radius=30;
-    this.length=120;
+    this.length=250; // bigger ramps
+    this.heightRamp=30; // ramp thickness
     this.x=x;
     this.y=y;
     this.vx=0;
@@ -67,7 +68,7 @@ class Block {
       ctx.save();
       ctx.translate(this.x,this.y);
       ctx.rotate(this.angle);
-      ctx.fillRect(0,0,this.length,20);
+      ctx.fillRect(0,0,this.length,this.heightRamp);
       ctx.restore();
     }
   }
@@ -89,25 +90,31 @@ class Block {
     // Floor collisions
     if(this.type==='rect' && this.y+this.height>canvas.height){ this.y=canvas.height-this.height; this.vy*=-bounce; }
     if(this.type==='circle' && this.y+this.radius>canvas.height){ this.y=canvas.height-this.radius; this.vy*=-bounce; }
-    if(this.type==='ramp' && this.y+20>canvas.height){ this.y=canvas.height-20; this.vy*=-bounce; }
+    if(this.type==='ramp' && this.y+this.heightRamp>canvas.height){ this.y=canvas.height-this.heightRamp; this.vy*=-bounce; }
   }
 }
 
-// Safe spawn without overlapping
+// Safe spawn for all non-circle blocks
 function spawnBlock(type){
   let attempts=0;
-  let x=0,y=0;
+  let x=0, y=0;
   while(attempts<100){
-    x=50 + Math.random()*(canvas.width-150);
-    y=50 + Math.random()*(canvas.height-150);
+    x = 50 + Math.random()*(canvas.width-150);
+    y = 50 + Math.random()*(canvas.height-150);
+    // Only check overlaps for ramps and rectangles
+    if(type==='circle') break;
     let overlap = blocks.some(b=>{
-      return Math.abs(b.x-x)<100 && Math.abs(b.y-y)<100;
+      let minDist = 0;
+      if(b.type==='circle') minDist = b.radius*2;
+      else if(b.type==='rect') minDist = 70;
+      else if(b.type==='ramp') minDist = 200; // bigger for ramps
+      return Math.abs(b.x-x)<minDist && Math.abs(b.y-y)<minDist;
     });
     if(!overlap) break;
     attempts++;
   }
   let angle=0;
-  if(type==='ramp') angle = Math.random()*0.4-0.2; // slope ramps (-~23° to 23°)
+  if(type==='ramp') angle = Math.random()*0.4-0.2; // slope
   blocks.push(new Block(type,x,y,angle));
 }
 
@@ -115,20 +122,16 @@ function togglePause(){ paused=!paused; }
 function resetCanvas(){ blocks=[]; }
 function setGravity(val){ gravity=parseFloat(val); document.getElementById('gravityVal').textContent=gravity; }
 
-// Simple collision handling for demo
+// Collision handling (simplified)
 function handleCollisions(){
   for(let i=0;i<blocks.length;i++){
     for(let j=i+1;j<blocks.length;j++){
       const a=blocks[i], b=blocks[j];
       if(a.dragging || b.dragging) continue;
-      // circle-circle
       if(a.type==='circle' && b.type==='circle') resolveCircleCircle(a,b);
-      // rect-rect
       if(a.type==='rect' && b.type==='rect') resolveRectRect(a,b);
-      // circle-rect
       if(a.type==='circle' && b.type==='rect') resolveCircleRect(a,b);
       if(a.type==='rect' && b.type==='circle') resolveCircleRect(b,a);
-      // ramps
       if(a.type==='circle' && b.type==='ramp') resolveRamp(a,b);
       if(a.type==='rect' && b.type==='ramp') resolveRamp(a,b);
       if(b.type==='circle' && a.type==='ramp') resolveRamp(b,a);
@@ -138,7 +141,7 @@ function handleCollisions(){
   }
 }
 
-function resolveCircleCircle(a,b){ /* same as before */ 
+function resolveCircleCircle(a,b){
   let dx=b.x-a.x, dy=b.y-a.y;
   let dist=Math.sqrt(dx*dx+dy*dy);
   let minDist=a.radius+b.radius;
@@ -156,7 +159,7 @@ function resolveCircleCircle(a,b){ /* same as before */
   }
 }
 
-function resolveRectRect(a,b){ /* simplified stacking */
+function resolveRectRect(a,b){
   if(a.x<a.x+b.width && a.x+a.width>b.x && a.y<a.y+b.height && a.y+a.height>b.y){
     let overlapX = Math.min(a.x+a.width-b.x,b.x+b.width-a.x);
     let overlapY = Math.min(a.y+a.height-b.y,b.y+b.height-a.y);
@@ -188,7 +191,7 @@ function resolveRamp(obj,ramp){
   let sin=Math.sin(angle), cos=Math.cos(angle);
   let rampY = sin*(obj.x-rx)+ry;
   let objY = (obj.type==='circle') ? obj.y-obj.radius : obj.y+obj.height;
-  if(objY>rampY && objY<rampY+10){
+  if(objY>rampY && objY<rampY+ramp.heightRamp){
     if(obj.type==='circle') obj.y=rampY+obj.radius;
     if(obj.type==='rect') obj.y=rampY-obj.height;
     obj.vx += gravity*sin*0.02;
@@ -205,7 +208,7 @@ canvas.addEventListener('mousedown', e=>{
     let hit=false;
     if(b.type==='rect') hit=mx>b.x && mx<b.x+b.width && my>b.y && my<b.y+b.height;
     if(b.type==='circle') hit=(mx-b.x)**2+(my-b.y)**2<b.radius**2;
-    if(b.type==='ramp') hit=mx>b.x && mx<b.x+b.length && my>b.y && my<b.y+20;
+    if(b.type==='ramp') hit=mx>b.x && mx<b.x+b.length && my>b.y && my<b.y+b.heightRamp;
     if(hit){ selected=b; b.dragging=true; offsetX=mx-b.x; offsetY=my-b.y; break; }
   }
 });
