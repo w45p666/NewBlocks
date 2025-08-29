@@ -68,7 +68,14 @@ function spawn(type) {
     else if (type === 'square') body = Bodies.rectangle(x, y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } });
     else if (type === 'ramp') {
         const widthRamp = 200, heightRamp = 20, angle = Math.random() * 0.5 - 0.25;
-        body = Bodies.rectangle(x, y+100, widthRamp, heightRamp, { isStatic: true, angle: angle, render: { fillStyle: '#2ecc71' } });
+        // Make ramp dynamic but very heavy, so it stays put but draggable
+        body = Bodies.rectangle(x, y+100, widthRamp, heightRamp, { 
+            mass: 1000, 
+            friction: 0.8, 
+            restitution: 0.1,
+            angle: angle, 
+            render: { fillStyle: '#2ecc71' }
+        });
     }
     World.add(world, body);
 }
