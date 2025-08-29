@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>New Blocks</title>
 <style>
-  body { margin:0; font-family: Arial; background: #f0f8ff; display:flex; flex-direction: column; align-items:center; }
+  body { margin:0; font-family: Arial; background:#f0f8ff; display:flex; flex-direction: column; align-items:center; }
   #toolbar { margin:10px; display:flex; flex-wrap:wrap; gap:5px; }
   button, input[type=range] { margin:5px; padding:8px 15px; border:none; border-radius:5px; background:#007bff; color:white; cursor:pointer; }
   button:hover { background:#0056b3; }
@@ -20,28 +20,31 @@
   <button onclick="spawnBlock('circle')">Circle</button>
   <button onclick="spawnBlock('ramp')">Ramp</button>
   <button onclick="resetCanvas()">Reset</button>
-  <label>Gravity: <span id="gravityVal">0.5</span></label>
-  <input type="range" id="gravitySlider" min="0" max="2" step="0.05" value="0.5" oninput="setGravity(this.value)">
+  <label>Gravity: <span id="gravityVal">9.8</span></label>
+  <input type="range" id="gravitySlider" min="1" max="20" step="0.1" value="9.8" oninput="setGravity(this.value)">
   <button onclick="togglePause()">Pause/Unpause</button>
 </div>
 
-<canvas id="playground" width="900" height="500"></canvas>
+<canvas id="playground" width="1000" height="600"></canvas>
 
 <script>
 const canvas = document.getElementById('playground');
 const ctx = canvas.getContext('2d');
 let blocks = [];
 let paused = false;
-let gravity = 0.5;
-const friction = 0.99;
-const bounce = 0.6;
+let gravity = 9.8;
+let lastTime = performance.now();
 
 document.getElementById('gravitySlider').addEventListener('input', e=>{
   gravity = parseFloat(e.target.value);
   document.getElementById('gravityVal').textContent = gravity;
 });
 
-class Block{
+// Physics constants
+const friction = 0.99;
+const bounce = 0.6;
+
+class Block {
   constructor(type,x,y){
     this.type=type;
     this.x=x;
@@ -52,9 +55,13 @@ class Block{
     this.height=60;
     this.radius=30;
     this.color='#'+Math.floor(Math.random()*16777215).toString(16);
+    this.mass = (type==='circle') ? Math.PI*this.radius*this.radius/100 : this.width*this.height/100;
     this.static = type==='ramp';
     this.dragging=false;
+    this.angle=0; 
+    this.length=120;
   }
+
   draw(){
     ctx.fillStyle=this.color;
     if(this.type==='rect'){
@@ -66,98 +73,153 @@ class Block{
     } else if(this.type==='ramp'){
       ctx.save();
       ctx.translate(this.x,this.y);
-      ctx.rotate(-Math.PI/6);
-      ctx.fillRect(0,0,120,20);
+      ctx.rotate(this.angle);
+      ctx.fillRect(0,0,this.length,20);
       ctx.restore();
     }
   }
-  update(){
-    if(!paused && !this.static && !this.dragging){
-      this.vy += gravity;
-      this.vx *= friction;
-      this.vy *= friction;
-      this.x += this.vx;
-      this.y += this.vy;
-      // Floor collision
-      if(this.type==='rect' && this.y+this.height>canvas.height){ this.y=canvas.height-this.height; this.vy*=-bounce; }
-      if(this.type==='circle' && this.y+this.radius>canvas.height){ this.y=canvas.height-this.radius; this.vy*=-bounce; }
-      // Wall collision
-      if(this.x<0){ this.x=0; this.vx*=-bounce; }
-      if(this.type==='rect' && this.x+this.width>canvas.width){ this.x=canvas.width-this.width; this.vx*=-bounce; }
-      if(this.type==='circle' && this.x+this.radius>canvas.width){ this.x=canvas.width-this.radius; this.vx*=-bounce; }
-    }
+
+  update(dt){
+    if(this.static || this.dragging || paused) return;
+    // Apply gravity
+    this.vy += gravity*dt;
+    // Apply friction
+    this.vx *= friction;
+    this.vy *= friction;
+    // Update position
+    this.x += this.vx;
+    this.y += this.vy;
+    // Wall collisions
+    if(this.x<0){ this.x=0; this.vx*=-bounce; }
+    if(this.type==='rect' && this.x+this.width>canvas.width){ this.x=canvas.width-this.width; this.vx*=-bounce; }
+    if(this.type==='circle' && this.x+this.radius>canvas.width){ this.x=canvas.width-this.radius; this.vx*=-bounce; }
+    // Floor collisions
+    if(this.type==='rect' && this.y+this.height>canvas.height){ this.y=canvas.height-this.height; this.vy*=-bounce; }
+    if(this.type==='circle' && this.y+this.radius>canvas.height){ this.y=canvas.height-this.radius; this.vy*=-bounce; }
   }
 }
 
 // Spawn blocks
 function spawnBlock(type){
-  let x = 100 + Math.random()*700;
-  let y = 0;
+  let x = 100 + Math.random()*(canvas.width-200);
+  let y = 50;
   blocks.push(new Block(type,x,y));
 }
 
+// Pause and reset
 function togglePause(){ paused=!paused; }
 function resetCanvas(){ blocks=[]; }
 function setGravity(val){ gravity=parseFloat(val); document.getElementById('gravityVal').textContent=gravity; }
 
-// Improved collisions
+// Collision helpers
+function resolveCircleCircle(a,b){
+  let dx=b.x-a.x;
+  let dy=b.y-a.y;
+  let dist=Math.sqrt(dx*dx+dy*dy);
+  let minDist=a.radius+b.radius;
+  if(dist<minDist){
+    let nx=dx/dist||0, ny=dy/dist||1;
+    let overlap=minDist-dist;
+    let totalMass = a.mass+b.mass;
+    if(!a.static) { a.x -= nx*overlap*(b.mass/totalMass); a.y -= ny*overlap*(b.mass/totalMass); }
+    if(!b.static) { b.x += nx*overlap*(a.mass/totalMass); b.y += ny*overlap*(a.mass/totalMass); }
+    // Velocity update (1D along normal)
+    let relVel = (b.vx-a.vx)*nx + (b.vy-a.vy)*ny;
+    if(relVel>0) return;
+    let impulse = -(1+bounce)*relVel/(1/a.mass+1/b.mass);
+    if(!a.static){ a.vx -= impulse*nx/a.mass; a.vy -= impulse*ny/a.mass; }
+    if(!b.static){ b.vx += impulse*nx/b.mass; b.vy += impulse*ny/b.mass; }
+  }
+}
+
+// Rect-Rect stacking
+function resolveRectRect(a,b){
+  if(a.x<a.x+b.width && a.x+a.width>b.x && a.y<a.y+b.height && a.y+a.height>b.y){
+    let overlapX = Math.min(a.x+a.width-b.x,b.x+b.width-a.x);
+    let overlapY = Math.min(a.y+a.height-b.y,b.y+b.height-a.y);
+    if(overlapX<overlapY){
+      if(a.x<b.x){ if(!a.static) a.x-=overlapX; } else { if(!a.static) a.x+=overlapX; }
+      let tempVx = a.vx; a.vx = b.vx; b.vx = tempVx;
+    } else {
+      if(a.y<b.y){ if(!a.static) a.y-=overlapY; } else { if(!a.static) a.y+=overlapY; }
+      let tempVy = a.vy; a.vy = b.vy*bounce; b.vy = tempVy*bounce;
+    }
+  }
+}
+
+// Circle-Rect collision
+function resolveCircleRect(circle,rect){
+  let nearestX = Math.max(rect.x, Math.min(circle.x, rect.x+rect.width));
+  let nearestY = Math.max(rect.y, Math.min(circle.y, rect.y+rect.height));
+  let dx = circle.x-nearestX;
+  let dy = circle.y-nearestY;
+  let dist = Math.sqrt(dx*dx+dy*dy);
+  if(dist<circle.radius){
+    let nx=dx/dist||0, ny=dy/dist||1;
+    let overlap = circle.radius-dist;
+    if(!circle.static){ circle.x+=nx*overlap; circle.y+=ny*overlap; circle.vx*=0.7; circle.vy*=0.7; }
+  }
+}
+
+// Ramp collision
+function resolveRamp(obj,ramp){
+  let rx=ramp.x, ry=ramp.y, angle=ramp.angle, length=ramp.length;
+  let sin=Math.sin(angle), cos=Math.cos(angle);
+  let rampY = sin*(obj.x-rx)+ry;
+  let objY = (obj.type==='circle') ? obj.y-obj.radius : obj.y+obj.height;
+  if(objY>rampY && objY<rampY+10){
+    if(obj.type==='circle') obj.y=rampY+obj.radius;
+    if(obj.type==='rect') obj.y=rampY-obj.height;
+    obj.vx += gravity*sin*0.02;
+    obj.vy = gravity*cos*0.02;
+  }
+}
+
+// Handle all collisions
 function handleCollisions(){
   for(let i=0;i<blocks.length;i++){
     for(let j=i+1;j<blocks.length;j++){
       const a=blocks[i], b=blocks[j];
-      if(a.static && b.static) continue;
-      if(a.dragging || b.dragging) continue; // dragged blocks don't move others
-
-      // Circle-Circle collision
-      if(a.type==='circle' && b.type==='circle'){
-        const dx=b.x-a.x;
-        const dy=b.y-a.y;
-        const dist=Math.sqrt(dx*dx+dy*dy);
-        if(dist<a.radius+b.radius){
-          const overlap=a.radius+b.radius-dist;
-          const nx=dx/dist, ny=dy/dist;
-          if(!a.static) a.x-=nx*overlap/2; a.y-=ny*overlap/2;
-          if(!b.static) b.x+=nx*overlap/2; b.y+=ny*overlap/2;
-          const vx=(a.vx+b.vx)/2, vy=(a.vy+b.vy)/2;
-          if(!a.static){ a.vx=vx; a.vy=vy; }
-          if(!b.static){ b.vx=vx; b.vy=vy; }
-        }
-      } else {
-        // Rect-Rect simple stacking
-        if(a.x<a.x+a.width && b.x<b.x+b.width && a.y<a.y+a.height && b.y<b.y+b.height){
-          if(a.y<b.y){ if(!a.static) a.vy*=-bounce; if(!b.static) b.y=a.y+a.height; }
-          else{ if(!b.static) b.vy*=-bounce; if(!a.static) a.y=b.y+b.height; }
-        }
-      }
+      if(a.dragging || b.dragging) continue;
+      if(a.type==='circle' && b.type==='circle') resolveCircleCircle(a,b);
+      if(a.type==='rect' && b.type==='rect') resolveRectRect(a,b);
+      if(a.type==='circle' && b.type==='rect') resolveCircleRect(a,b);
+      if(a.type==='rect' && b.type==='circle') resolveCircleRect(b,a);
+      if(a.type==='circle' && b.type==='ramp') resolveRamp(a,b);
+      if(a.type==='rect' && b.type==='ramp') resolveRamp(a,b);
+      if(b.type==='circle' && a.type==='ramp') resolveRamp(b,a);
+      if(b.type==='rect' && a.type==='ramp') resolveRamp(b,a);
     }
   }
 }
 
 // Drag & drop
 let selected=null, offsetX=0, offsetY=0;
-canvas.addEventListener('mousedown',e=>{
+canvas.addEventListener('mousedown', e=>{
   const mx=e.offsetX,my=e.offsetY;
   for(let i=blocks.length-1;i>=0;i--){
     const b=blocks[i];
     let hit=false;
     if(b.type==='rect') hit=mx>b.x && mx<b.x+b.width && my>b.y && my<b.y+b.height;
     if(b.type==='circle') hit=(mx-b.x)**2+(my-b.y)**2<b.radius**2;
-    if(b.type==='ramp') hit=mx>b.x && mx<b.x+120 && my>b.y && my<b.y+20;
+    if(b.type==='ramp') hit=mx>b.x && mx<b.x+b.length && my>b.y && my<b.y+20;
     if(hit){ selected=b; b.dragging=true; offsetX=mx-b.x; offsetY=my-b.y; break; }
   }
 });
-canvas.addEventListener('mousemove',e=>{ if(selected){ selected.x=e.offsetX-offsetX; selected.y=e.offsetY-offsetY; } });
-canvas.addEventListener('mouseup',e=>{ if(selected) selected.dragging=false; selected=null; });
+canvas.addEventListener('mousemove', e=>{ if(selected){ selected.x=e.offsetX-offsetX; selected.y=e.offsetY-offsetY; } });
+canvas.addEventListener('mouseup', e=>{ if(selected) selected.dragging=false; selected=null; });
 
 // Animation
-function animate(){
+function animate(time){
+  let dt = (time-lastTime)/1000;
+  lastTime=time;
   ctx.clearRect(0,0,canvas.width,canvas.height);
   handleCollisions();
-  blocks.forEach(b=>b.update());
+  blocks.forEach(b=>b.update(dt));
   blocks.forEach(b=>b.draw());
   requestAnimationFrame(animate);
 }
-animate();
+requestAnimationFrame(animate);
 </script>
 </body>
 </html>
