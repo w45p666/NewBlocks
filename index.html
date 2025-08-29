@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mini Code Gibbon</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 20px; background: #f0f8ff; }
+  h1 { text-align: center; color: #6a0dad; }
+  #blocks, #canvasContainer { margin: 20px auto; max-width: 600px; }
+  .block { padding: 10px; margin: 5px; background: #6a0dad; color: white; cursor: grab; border-radius: 5px; }
+  #program { min-height: 100px; background: #fff; border: 2px dashed #6a0dad; padding: 10px; border-radius: 10px; }
+  canvas { border: 1px solid #6a0dad; display: block; margin-top: 10px; }
+  button { padding: 8px 15px; margin-top: 10px; background: #6a0dad; color: white; border: none; border-radius: 5px; cursor: pointer; }
+  button:hover { background: #520a9e; }
+</style>
+</head>
+<body>
+
+<h1>Mini Code Gibbon</h1>
+
+<section id="blocks">
+  <div class="block" data-command="forward">Move Forward</div>
+  <div class="block" data-command="left">Turn Left</div>
+  <div class="block" data-command="right">Turn Right</div>
+</section>
+
+<section id="program">
+  <p>Drag blocks here to build your program</p>
+</section>
+<button id="run">Run Program</button>
+
+<section id="canvasContainer">
+  <canvas id="gameCanvas" width="400" height="400"></canvas>
+</section>
+
+<script>
+const blocks = document.querySelectorAll('.block');
+const program = document.getElementById('program');
+let programBlocks = [];
+
+// Drag & Drop blocks
+blocks.forEach(block=>{
+  block.addEventListener('click', ()=>{
+    const newBlock = document.createElement('div');
+    newBlock.textContent = block.textContent;
+    newBlock.dataset.command = block.dataset.command;
+    newBlock.className = 'block';
+    program.appendChild(newBlock);
+    programBlocks.push(block.dataset.command);
+  });
+});
+
+// Canvas setup
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let x = 200, y = 200, angle = 0;
+
+function runProgram() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  x = 200; y = 200; angle = 0;
+  ctx.beginPath();
+  ctx.moveTo(x,y);
+
+  programBlocks.forEach(cmd=>{
+    if(cmd === 'forward'){
+      x += 50*Math.cos(angle*Math.PI/180);
+      y += 50*Math.sin(angle*Math.PI/180);
+    } else if(cmd === 'left'){
+      angle -= 90;
+    } else if(cmd === 'right'){
+      angle += 90;
+    }
+    ctx.lineTo(x,y);
+  });
+
+  ctx.strokeStyle = '#6a0dad';
+  ctx.lineWidth = 4;
+  ctx.stroke();
+}
+
+document.getElementById('run').addEventListener('click', runProgram);
+</script>
+
+</body>
+</html>
