@@ -5,12 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>New Blocks</title>
 <style>
-body { margin:0; font-family: Arial; background:#f0f8ff; display:flex; flex-direction: column; align-items:center; }
-#toolbar { margin:10px; display:flex; flex-wrap:wrap; gap:5px; }
-button, input[type=range] { margin:5px; padding:8px 15px; border:none; border-radius:5px; background:#007bff; color:white; cursor:pointer; }
+html, body { margin:0; padding:0; overflow:hidden; font-family: Arial; background:#f0f8ff; }
+#toolbar { margin:5px; display:flex; flex-wrap:wrap; gap:5px; }
+button, input[type=range] { margin:5px; padding:6px 12px; border:none; border-radius:5px; background:#007bff; color:white; cursor:pointer; }
 button:hover { background:#0056b3; }
-input[type=range] { padding:0; }
-canvas { border:2px solid #007bff; background:white; margin-top:10px; display:block; }
+canvas { border:2px solid #007bff; display:block; margin:0 auto; background:white; }
 </style>
 </head>
 <body>
@@ -25,7 +24,7 @@ canvas { border:2px solid #007bff; background:white; margin-top:10px; display:bl
   <button onclick="togglePause()">Pause/Unpause</button>
 </div>
 
-<canvas id="playground" width="1000" height="600"></canvas>
+<canvas id="playground" width="900" height="500"></canvas>
 
 <script>
 const canvas = document.getElementById('playground');
@@ -44,21 +43,20 @@ const friction = 0.99;
 const bounce = 0.6;
 
 class Block {
-  constructor(type,x,y){
+  constructor(type,x,y,angle=0){
     this.type=type;
     this.width=60;
     this.height=60;
     this.radius=30;
     this.length=120;
-    this.x = Math.min(Math.max(x,0),canvas.width - (type==='circle'?this.radius*2:this.width));
-    this.y = Math.min(Math.max(y,0),canvas.height - (type==='circle'?this.radius*2:this.height));
+    this.x=x;
+    this.y=y;
     this.vx=0;
     this.vy=0;
     this.color='#'+Math.floor(Math.random()*16777215).toString(16);
     this.mass = (type==='circle') ? Math.PI*this.radius*this.radius/100 : this.width*this.height/100;
-    this.static = false;
     this.dragging=false;
-    this.angle=0;
+    this.angle = angle;
   }
 
   draw(){
@@ -95,18 +93,52 @@ class Block {
   }
 }
 
+// Safe spawn without overlapping
 function spawnBlock(type){
-  let x = 50 + Math.random()*(canvas.width-150);
-  let y = 50 + Math.random()*100;
-  blocks.push(new Block(type,x,y));
+  let attempts=0;
+  let x=0,y=0;
+  while(attempts<100){
+    x=50 + Math.random()*(canvas.width-150);
+    y=50 + Math.random()*(canvas.height-150);
+    let overlap = blocks.some(b=>{
+      return Math.abs(b.x-x)<100 && Math.abs(b.y-y)<100;
+    });
+    if(!overlap) break;
+    attempts++;
+  }
+  let angle=0;
+  if(type==='ramp') angle = Math.random()*0.4-0.2; // slope ramps (-~23° to 23°)
+  blocks.push(new Block(type,x,y,angle));
 }
 
 function togglePause(){ paused=!paused; }
 function resetCanvas(){ blocks=[]; }
 function setGravity(val){ gravity=parseFloat(val); document.getElementById('gravityVal').textContent=gravity; }
 
-// Collision resolution
-function resolveCircleCircle(a,b){
+// Simple collision handling for demo
+function handleCollisions(){
+  for(let i=0;i<blocks.length;i++){
+    for(let j=i+1;j<blocks.length;j++){
+      const a=blocks[i], b=blocks[j];
+      if(a.dragging || b.dragging) continue;
+      // circle-circle
+      if(a.type==='circle' && b.type==='circle') resolveCircleCircle(a,b);
+      // rect-rect
+      if(a.type==='rect' && b.type==='rect') resolveRectRect(a,b);
+      // circle-rect
+      if(a.type==='circle' && b.type==='rect') resolveCircleRect(a,b);
+      if(a.type==='rect' && b.type==='circle') resolveCircleRect(b,a);
+      // ramps
+      if(a.type==='circle' && b.type==='ramp') resolveRamp(a,b);
+      if(a.type==='rect' && b.type==='ramp') resolveRamp(a,b);
+      if(b.type==='circle' && a.type==='ramp') resolveRamp(b,a);
+      if(b.type==='rect' && a.type==='ramp') resolveRamp(b,a);
+      if(a.type==='ramp' && b.type==='ramp') resolveRectRect(a,b);
+    }
+  }
+}
+
+function resolveCircleCircle(a,b){ /* same as before */ 
   let dx=b.x-a.x, dy=b.y-a.y;
   let dist=Math.sqrt(dx*dx+dy*dy);
   let minDist=a.radius+b.radius;
@@ -114,26 +146,26 @@ function resolveCircleCircle(a,b){
     let nx=dx/dist||0, ny=dy/dist||1;
     let overlap=minDist-dist;
     let totalMass = a.mass+b.mass;
-    if(!a.static) { a.x -= nx*overlap*(b.mass/totalMass); a.y -= ny*overlap*(b.mass/totalMass); }
-    if(!b.static) { b.x += nx*overlap*(a.mass/totalMass); b.y += ny*overlap*(a.mass/totalMass); }
+    a.x -= nx*overlap*(b.mass/totalMass); a.y -= ny*overlap*(b.mass/totalMass);
+    b.x += nx*overlap*(a.mass/totalMass); b.y += ny*overlap*(a.mass/totalMass);
     let relVel = (b.vx-a.vx)*nx + (b.vy-a.vy)*ny;
     if(relVel>0) return;
     let impulse = -(1+bounce)*relVel/(1/a.mass+1/b.mass);
-    if(!a.static){ a.vx -= impulse*nx/a.mass; a.vy -= impulse*ny/a.mass; }
-    if(!b.static){ b.vx += impulse*nx/b.mass; b.vy += impulse*ny/b.mass; }
+    a.vx -= impulse*nx/a.mass; a.vy -= impulse*ny/a.mass;
+    b.vx += impulse*nx/b.mass; b.vy += impulse*ny/b.mass;
   }
 }
 
-function resolveRectRect(a,b){
+function resolveRectRect(a,b){ /* simplified stacking */
   if(a.x<a.x+b.width && a.x+a.width>b.x && a.y<a.y+b.height && a.y+a.height>b.y){
     let overlapX = Math.min(a.x+a.width-b.x,b.x+b.width-a.x);
     let overlapY = Math.min(a.y+a.height-b.y,b.y+b.height-a.y);
     if(overlapX<overlapY){
-      if(a.x<b.x){ if(!a.static) a.x-=overlapX; } else { if(!a.static) a.x+=overlapX; }
-      let tempVx = a.vx; a.vx = b.vx; b.vx = tempVx;
+      if(a.x<b.x) a.x-=overlapX; else a.x+=overlapX;
+      [a.vx,b.vx] = [b.vx,a.vx];
     } else {
-      if(a.y<b.y){ if(!a.static) a.y-=overlapY; } else { if(!a.static) a.y+=overlapY; }
-      let tempVy = a.vy; a.vy = b.vy*bounce; b.vy = tempVy*bounce;
+      if(a.y<b.y) a.y-=overlapY; else a.y+=overlapY;
+      [a.vy,b.vy] = [b.vy*a.bounce,a.vy*b.bounce];
     }
   }
 }
@@ -146,7 +178,8 @@ function resolveCircleRect(circle,rect){
   if(dist<circle.radius){
     let nx=dx/dist||0, ny=dy/dist||1;
     let overlap = circle.radius-dist;
-    if(!circle.static){ circle.x+=nx*overlap; circle.y+=ny*overlap; circle.vx*=0.7; circle.vy*=0.7; }
+    circle.x+=nx*overlap; circle.y+=ny*overlap;
+    circle.vx*=0.7; circle.vy*=0.7;
   }
 }
 
@@ -160,25 +193,6 @@ function resolveRamp(obj,ramp){
     if(obj.type==='rect') obj.y=rampY-obj.height;
     obj.vx += gravity*sin*0.02;
     obj.vy = gravity*cos*0.02;
-  }
-}
-
-// Handle collisions
-function handleCollisions(){
-  for(let i=0;i<blocks.length;i++){
-    for(let j=i+1;j<blocks.length;j++){
-      const a=blocks[i], b=blocks[j];
-      if(a.dragging || b.dragging) continue;
-      if(a.type==='circle' && b.type==='circle') resolveCircleCircle(a,b);
-      if(a.type==='rect' && b.type==='rect') resolveRectRect(a,b);
-      if(a.type==='circle' && b.type==='rect') resolveCircleRect(a,b);
-      if(a.type==='rect' && b.type==='circle') resolveCircleRect(b,a);
-      if(a.type==='circle' && b.type==='ramp') resolveRamp(a,b);
-      if(a.type==='rect' && b.type==='ramp') resolveRamp(a,b);
-      if(b.type==='circle' && a.type==='ramp') resolveRamp(b,a);
-      if(b.type==='rect' && a.type==='ramp') resolveRamp(b,a);
-      if(a.type==='ramp' && b.type==='ramp') resolveRectRect(a,b);
-    }
   }
 }
 
@@ -198,7 +212,6 @@ canvas.addEventListener('mousedown', e=>{
 canvas.addEventListener('mousemove', e=>{ if(selected){ selected.x=e.offsetX-offsetX; selected.y=e.offsetY-offsetY; } });
 canvas.addEventListener('mouseup', e=>{ if(selected) selected.dragging=false; selected=null; });
 
-// Animate
 function animate(time){
   let dt = (time-lastTime)/1000;
   lastTime=time;
