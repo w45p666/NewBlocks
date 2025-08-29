@@ -3,83 +3,153 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mini Code Gibbon</title>
+<title>Learning Playground</title>
 <style>
-  body { font-family: Arial, sans-serif; padding: 20px; background: #f0f8ff; }
+  body { font-family: Arial, sans-serif; background: #f0f8ff; padding: 20px; }
   h1 { text-align: center; color: #6a0dad; }
-  #blocks, #canvasContainer { margin: 20px auto; max-width: 600px; }
-  .block { padding: 10px; margin: 5px; background: #6a0dad; color: white; cursor: grab; border-radius: 5px; }
-  #program { min-height: 100px; background: #fff; border: 2px dashed #6a0dad; padding: 10px; border-radius: 10px; }
-  canvas { border: 1px solid #6a0dad; display: block; margin-top: 10px; }
-  button { padding: 8px 15px; margin-top: 10px; background: #6a0dad; color: white; border: none; border-radius: 5px; cursor: pointer; }
+  #menu { text-align: center; margin-bottom: 20px; }
+  button { margin: 5px; padding: 10px 20px; border-radius: 5px; border: none; background: #6a0dad; color: white; cursor: pointer; }
   button:hover { background: #520a9e; }
+  section { background: #fff; padding: 20px; margin: 10px auto; border-radius: 10px; max-width: 600px; box-shadow: 0 0 10px rgba(0,0,0,0.1);}
+  input, textarea { width: 100%; padding: 8px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; }
+  .flashcard { background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 10px; cursor: pointer; text-align: center; font-weight: bold;}
 </style>
 </head>
 <body>
 
-<h1>Mini Code Gibbon</h1>
+<h1>Learning Playground</h1>
 
-<section id="blocks">
-  <div class="block" data-command="forward">Move Forward</div>
-  <div class="block" data-command="left">Turn Left</div>
-  <div class="block" data-command="right">Turn Right</div>
+<div id="menu">
+  <button onclick="showSection('quizCreator')">Create Quiz</button>
+  <button onclick="showSection('quizPlayer')">Take Quiz</button>
+  <button onclick="showSection('flashcards')">Flashcards</button>
+</div>
+
+<section id="quizCreator" class="hidden">
+  <h2>Create Quiz</h2>
+  <input id="question" placeholder="Question">
+  <input id="answer1" placeholder="Answer 1">
+  <input id="answer2" placeholder="Answer 2">
+  <input id="answer3" placeholder="Answer 3">
+  <input id="answer4" placeholder="Answer 4">
+  <input id="correct" placeholder="Correct answer number (1-4)">
+  <button onclick="addQuizQuestion()">Add Question</button>
+  <p id="quizMsg"></p>
 </section>
 
-<section id="program">
-  <p>Drag blocks here to build your program</p>
+<section id="quizPlayer" class="hidden">
+  <h2>Take Quiz</h2>
+  <div id="quizArea"></div>
+  <p id="quizResult"></p>
+  <button onclick="restartQuiz()">Restart Quiz</button>
 </section>
-<button id="run">Run Program</button>
 
-<section id="canvasContainer">
-  <canvas id="gameCanvas" width="400" height="400"></canvas>
+<section id="flashcards" class="hidden">
+  <h2>Flashcards</h2>
+  <input id="fcQuestion" placeholder="Flashcard Question">
+  <input id="fcAnswer" placeholder="Flashcard Answer">
+  <button onclick="addFlashcard()">Add Flashcard</button>
+  <div id="flashcardArea"></div>
 </section>
 
 <script>
-const blocks = document.querySelectorAll('.block');
-const program = document.getElementById('program');
-let programBlocks = [];
+  // Sections
+  function showSection(id){
+    document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+    if(id==='quizPlayer') loadQuiz();
+    if(id==='flashcards') loadFlashcards();
+  }
 
-// Drag & Drop blocks
-blocks.forEach(block=>{
-  block.addEventListener('click', ()=>{
-    const newBlock = document.createElement('div');
-    newBlock.textContent = block.textContent;
-    newBlock.dataset.command = block.dataset.command;
-    newBlock.className = 'block';
-    program.appendChild(newBlock);
-    programBlocks.push(block.dataset.command);
-  });
-});
+  // --- Quiz Creator ---
+  let quiz = JSON.parse(localStorage.getItem('quiz')) || [];
 
-// Canvas setup
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-let x = 200, y = 200, angle = 0;
+  function addQuizQuestion(){
+    const q = document.getElementById('question').value;
+    const a1 = document.getElementById('answer1').value;
+    const a2 = document.getElementById('answer2').value;
+    const a3 = document.getElementById('answer3').value;
+    const a4 = document.getElementById('answer4').value;
+    const correct = parseInt(document.getElementById('correct').value);
 
-function runProgram() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  x = 200; y = 200; angle = 0;
-  ctx.beginPath();
-  ctx.moveTo(x,y);
-
-  programBlocks.forEach(cmd=>{
-    if(cmd === 'forward'){
-      x += 50*Math.cos(angle*Math.PI/180);
-      y += 50*Math.sin(angle*Math.PI/180);
-    } else if(cmd === 'left'){
-      angle -= 90;
-    } else if(cmd === 'right'){
-      angle += 90;
+    if(!q || !a1 || !a2 || !a3 || !a4 || !correct) {
+      document.getElementById('quizMsg').textContent = "Fill all fields!";
+      return;
     }
-    ctx.lineTo(x,y);
-  });
 
-  ctx.strokeStyle = '#6a0dad';
-  ctx.lineWidth = 4;
-  ctx.stroke();
-}
+    quiz.push({q,[0]:a1,[1]:a2,[2]:a3,[3]:a4,correct: correct-1});
+    localStorage.setItem('quiz', JSON.stringify(quiz));
+    document.getElementById('quizMsg').textContent = "Question added!";
+    document.querySelectorAll('#quizCreator input').forEach(i=>i.value='');
+  }
 
-document.getElementById('run').addEventListener('click', runProgram);
+  // --- Quiz Player ---
+  let current = 0;
+  function loadQuiz(){
+    if(quiz.length===0){
+      document.getElementById('quizArea').innerHTML = "<p>No quiz questions yet!</p>";
+      return;
+    }
+    showQuestion();
+  }
+
+  function showQuestion(){
+    const qObj = quiz[current];
+    let html = `<p><strong>${qObj.q}</strong></p>`;
+    qObj.forEach((a,i)=>{
+      if(i==='correct') return;
+      html += `<button onclick="checkAnswer(${i})">${a}</button><br>`;
+    });
+    document.getElementById('quizArea').innerHTML = html;
+    document.getElementById('quizResult').textContent = '';
+  }
+
+  function checkAnswer(i){
+    if(i===quiz[current].correct){
+      document.getElementById('quizResult').textContent = "✅ Correct!";
+    } else {
+      document.getElementById('quizResult').textContent = `❌ Wrong! Correct: ${quiz[current][quiz[current].correct]}`;
+    }
+    current++;
+    if(current<quiz.length){
+      setTimeout(showQuestion,1000);
+    } else {
+      setTimeout(()=>{document.getElementById('quizArea').innerHTML="<p>Quiz finished!</p>";},1000);
+      current = 0;
+    }
+  }
+
+  function restartQuiz(){
+    current=0;
+    loadQuiz();
+  }
+
+  // --- Flashcards ---
+  let flashcards = JSON.parse(localStorage.getItem('flashcards')) || [];
+
+  function addFlashcard(){
+    const q = document.getElementById('fcQuestion').value;
+    const a = document.getElementById('fcAnswer').value;
+    if(!q || !a) return;
+    flashcards.push({q,a});
+    localStorage.setItem('flashcards', JSON.stringify(flashcards));
+    document.getElementById('fcQuestion').value = '';
+    document.getElementById('fcAnswer').value = '';
+    loadFlashcards();
+  }
+
+  function loadFlashcards(){
+    const area = document.getElementById('flashcardArea');
+    area.innerHTML = '';
+    flashcards.forEach((fc,i)=>{
+      const div = document.createElement('div');
+      div.className = 'flashcard';
+      div.textContent = fc.q;
+      div.onclick = ()=>div.textContent = div.textContent===fc.q ? fc.a : fc.q;
+      area.appendChild(div);
+    });
+  }
+
 </script>
 
 </body>
