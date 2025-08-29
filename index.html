@@ -3,77 +3,155 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Physics Playground</title>
+<title>New Blocks</title>
 <style>
-  body { margin:0; font-family: Arial; background: #f0f8ff; display: flex; flex-direction: column; align-items: center; }
-  #toolbar { margin:10px; }
-  button { margin:5px; padding:8px 15px; border:none; border-radius:5px; background:#6a0dad; color:white; cursor:pointer; }
+  body { margin:0; font-family: Arial; background: #f0f8ff; display:flex; flex-direction: column; align-items:center; }
+  #toolbar { margin:10px; display:flex; flex-wrap:wrap; gap:5px; }
+  button, input[type=range] { margin:5px; padding:8px 15px; border:none; border-radius:5px; background:#6a0dad; color:white; cursor:pointer; }
   button:hover { background:#520a9e; }
-  canvas { border:2px solid #6a0dad; background:white; }
+  input[type=range] { padding:0; }
+  canvas { border:2px solid #6a0dad; background:white; margin-top:10px; }
 </style>
 </head>
 <body>
 
-<h1>Physics Playground</h1>
+<h1>Advanced Physics Playground</h1>
+
 <div id="toolbar">
-  <button onclick="spawnBlock('rect')">Add Rectangle</button>
-  <button onclick="spawnBlock('circle')">Add Circle</button>
+  <button onclick="spawnBlock('rect')">Rectangle</button>
+  <button onclick="spawnBlock('circle')">Circle</button>
+  <button onclick="spawnBlock('ramp')">Ramp</button>
+  <button onclick="resetCanvas()">Reset</button>
+  <label>Gravity: <span id="gravityVal">0.5</span></label>
+  <input type="range" id="gravitySlider" min="0" max="2" step="0.05" value="0.5" oninput="setGravity(this.value)">
   <button onclick="togglePause()">Pause/Unpause</button>
 </div>
 
-<canvas id="playground" width="600" height="400"></canvas>
+<canvas id="playground" width="900" height="500"></canvas>
 
 <script>
 const canvas = document.getElementById('playground');
 const ctx = canvas.getContext('2d');
 let blocks = [];
 let paused = false;
-const gravity = 0.5;
+let gravity = 0.5;
 
-// Block constructor
-class Block {
+document.getElementById('gravitySlider').addEventListener('input', e=>{
+  gravity = parseFloat(e.target.value);
+  document.getElementById('gravityVal').textContent = gravity;
+});
+
+// Block class
+class Block{
   constructor(type,x,y){
-    this.type = type;
-    this.x = x;
-    this.y = y;
-    this.vx = 0;
-    this.vy = 0;
-    this.width = 50;
-    this.height = 50;
-    this.radius = 25;
-    this.color = '#'+Math.floor(Math.random()*16777215).toString(16);
+    this.type=type;
+    this.x=x;
+    this.y=y;
+    this.vx=0;
+    this.vy=0;
+    this.width=60;
+    this.height=60;
+    this.radius=30;
+    this.color='#'+Math.floor(Math.random()*16777215).toString(16);
+    this.angle=0;
+    this.static = type==='ramp';
+    this.dragging=false;
   }
   draw(){
-    ctx.fillStyle = this.color;
-    if(this.type==='rect') ctx.fillRect(this.x,this.y,this.width,this.height);
-    else ctx.beginPath(), ctx.arc(this.x,this.y,this.radius,0,Math.PI*2), ctx.fill();
+    ctx.fillStyle=this.color;
+    if(this.type==='rect'){
+      ctx.fillRect(this.x,this.y,this.width,this.height);
+    } else if(this.type==='circle'){
+      ctx.beginPath();
+      ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+      ctx.fill();
+    } else if(this.type==='ramp'){
+      ctx.save();
+      ctx.translate(this.x,this.y);
+      ctx.rotate(-Math.PI/6); // ramp tilt
+      ctx.fillRect(0,0,120,20);
+      ctx.restore();
+    }
   }
   update(){
-    if(!paused){
+    if(!paused && !this.static && !this.dragging){
       this.vy += gravity;
       this.x += this.vx;
       this.y += this.vy;
       // floor collision
-      if(this.type==='rect' && this.y+this.height>canvas.height){ this.y=canvas.height-this.height; this.vy*=-0.5; }
-      if(this.type==='circle' && this.y+this.radius>canvas.height){ this.y=canvas.height-this.radius; this.vy*=-0.5; }
+      if(this.type==='rect' && this.y+this.height>canvas.height){ this.y=canvas.height-this.height; this.vy*=-0.4; }
+      if(this.type==='circle' && this.y+this.radius>canvas.height){ this.y=canvas.height-this.radius; this.vy*=-0.4; }
     }
   }
 }
 
+// Spawn new block
 function spawnBlock(type){
-  const block = new Block(type, Math.random()*(canvas.width-60)+30, 0);
-  blocks.push(block);
+  let x = 100 + Math.random()*700;
+  let y = 0;
+  blocks.push(new Block(type,x,y));
 }
 
-// Pause toggle
+// Pause/unpause
 function togglePause(){ paused=!paused; }
 
-// Animation loop
+// Reset canvas
+function resetCanvas(){ blocks=[]; }
+
+// Animation
 function animate(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  blocks.forEach(b=>{ b.update(); b.draw(); });
+  // simple collision detection between blocks
+  for(let i=0;i<blocks.length;i++){
+    for(let j=i+1;j<blocks.length;j++){
+      collide(blocks[i],blocks[j]);
+    }
+  }
+  blocks.forEach(b=>b.update());
+  blocks.forEach(b=>b.draw());
   requestAnimationFrame(animate);
 }
+
+// Simple rectangle/circle collision
+function collide(a,b){
+  if(a.static || b.static) return;
+  let ax=a.x, ay=a.y, bx=b.x, by=b.y;
+  let aw=a.width||a.radius*2, ah=a.height||a.radius*2;
+  let bw=b.width||b.radius*2, bh=b.height||b.radius*2;
+  if(ax<bx+bw && ax+aw>bx && ay<by+bh && ay+ah>by){
+    // push a up
+    a.vy*=-0.5;
+    a.y=by-bh;
+  }
+}
+
+// Drag and drop
+let selected = null, offsetX=0, offsetY=0;
+
+canvas.addEventListener('mousedown', e=>{
+  const mx=e.offsetX, my=e.offsetY;
+  for(let i=blocks.length-1;i>=0;i--){
+    const b=blocks[i];
+    let hit=false;
+    if(b.type==='rect') hit=mx>b.x && mx<b.x+b.width && my>b.y && my<b.y+b.height;
+    if(b.type==='circle') hit=(mx-b.x)**2+(my-b.y)**2<b.radius**2;
+    if(b.type==='ramp') hit=mx>b.x && mx<b.x+120 && my>b.y && my<b.y+20;
+    if(hit){ selected=b; b.dragging=true; offsetX=mx-b.x; offsetY=my-b.y; break; }
+  }
+});
+
+canvas.addEventListener('mousemove', e=>{
+  if(selected){
+    selected.x=e.offsetX-offsetX;
+    selected.y=e.offsetY-offsetY;
+  }
+});
+
+canvas.addEventListener('mouseup', e=>{
+  if(selected) selected.dragging=false;
+  selected=null;
+});
+
 animate();
 </script>
 
