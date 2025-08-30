@@ -31,7 +31,8 @@
   button:hover { background: #eee; }
   #welcome {
     position: absolute;
-    top: 20px; right: 20px;
+    top: 70px; /* moved below bar */
+    left: 10px;
     font-size: 1.2em;
     background: rgba(255,255,255,0.9);
     padding: 8px 15px;
@@ -97,8 +98,9 @@ const mouse = Mouse.create(canvas);
 const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
 World.add(world, mouseConstraint);
 
-// Keep track of ramps
+// Keep track of ramps and squares
 const ramps = [];
+const squares = [];
 
 // Rotate mode
 let rotateMode = false;
@@ -111,7 +113,7 @@ function toggleRotateMode() {
 // Object counter
 const counterEl = document.getElementById("counter");
 function updateCounter() {
-    let circles = 0, squares = 0, rampCount = ramps.length;
+    let circles = 0, squaresCount = 0, rampCount = ramps.length;
 
     world.bodies.forEach(b => {
         // Remove objects that fall off-screen
@@ -119,14 +121,16 @@ function updateCounter() {
             if (!b.removed) {
                 Composite.remove(world, b);
                 b.removed = true;
+                if (squares.includes(b)) squares.splice(squares.indexOf(b),1);
             }
         } else {
             if (b.label === "Circle Body") circles++;
-            else if (b.label === "Rectangle Body" && !ramps.includes(b)) squares++;
         }
     });
 
-    counterEl.innerHTML = `Circles: ${circles} | Squares: ${squares} | Ramps: ${rampCount}`;
+    squaresCount = squares.length;
+
+    counterEl.innerHTML = `Circles: ${circles} | Squares: ${squaresCount} | Ramps: ${rampCount}`;
 }
 
 // Spawn shapes
@@ -135,7 +139,10 @@ function spawn(type) {
     const y = 50;
     let body;
     if (type === 'circle') body = Bodies.circle(x, y, 30, { restitution: 0.7, render: { fillStyle: '#f39c12' } });
-    else if (type === 'square') body = Bodies.rectangle(x, y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } });
+    else if (type === 'square') {
+        body = Bodies.rectangle(x, y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } });
+        squares.push(body);
+    }
     else if (type === 'ramp') {
         const widthRamp = 200, heightRamp = 20;
         const angle = 25 * Math.PI / 180;
@@ -166,6 +173,7 @@ function resetWorld() {
     World.add(world, walls);
     World.add(world, mouseConstraint);
     ramps.length = 0;
+    squares.length = 0;
     updateCounter();
 }
 
@@ -193,13 +201,17 @@ Events.on(mouseConstraint, "mousemove", (e) => {
         Body.setAngle(selectedRamp, Math.atan2(dy, dx));
     } else {
         Body.setPosition(selectedRamp, e.mouse.position);
-        Body.setAngle(selectedRamp, 25 * Math.PI / 180);
+        // Only lock if ramp was never rotated manually
+        if (!selectedRamp.hasBeenRotated) Body.setAngle(selectedRamp, 25 * Math.PI / 180);
     }
 });
 
-Events.on(mouseConstraint, "mouseup", () => { selectedRamp = null; });
+Events.on(mouseConstraint, "mouseup", () => { 
+    if (selectedRamp && rotateMode) selectedRamp.hasBeenRotated = true;
+    selectedRamp = null; 
+});
 
-// Welcome message
+// Welcome message under bar
 const username = localStorage.getItem("username") || "Guest";
 const welcomeEl = document.getElementById("welcome");
 welcomeEl.innerText = `Welcome, ${username}`;
