@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Interactive Physics Sandbox</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
   body { 
     margin: 0; 
@@ -37,29 +36,11 @@
     opacity: 1;
     transition: opacity 1s ease-out;
   }
-  #slots {
-    margin-top: 10px;
-    max-height: 150px;
-    overflow-y: auto;
+  #counter {
+    margin-top: 8px;
+    font-size: 0.95em;
+    line-height: 1.4;
   }
-  .slot {
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center;
-    background: #fff;
-    padding: 5px 10px;
-    margin: 3px 0;
-    border-radius: 5px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-  }
-  .slot span { flex: 1; }
-  .delete-btn {
-    background: none;
-    border: none;
-    color: #c0392b;
-    cursor: pointer;
-  }
-  .delete-btn:hover { color: #e74c3c; }
 </style>
 </head>
 <body>
@@ -70,11 +51,9 @@
   <button onclick="spawn('ramp')">Spawn Ramp</button>
   <button onclick="resetWorld()">Reset</button>
   <button onclick="toggleGravity()">Pause/Play Gravity</button>
+  <button id="rotateModeBtn" onclick="toggleRotateMode()">Rotate Mode: OFF</button>
   <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1" onchange="updateGravity(this.value)"></label>
-  <hr>
-  <input id="slotName" type="text" placeholder="Save slot name">
-  <button onclick="saveSlot()">Save</button>
-  <div id="slots"></div>
+  <div id="counter">Circles: 0<br>Squares: 0<br>Ramps: 0</div>
 </div>
 
 <div id="welcome"></div>
@@ -117,6 +96,35 @@ World.add(world, mouseConstraint);
 // Keep track of ramps
 const ramps = [];
 
+// Rotate mode
+let rotateMode = false;
+const rotateBtn = document.getElementById("rotateModeBtn");
+function toggleRotateMode() {
+    rotateMode = !rotateMode;
+    rotateBtn.innerText = `Rotate Mode: ${rotateMode ? 'ON' : 'OFF'}`;
+}
+
+// Object counter
+const counterEl = document.getElementById("counter");
+function updateCounter() {
+    let circles = 0, squares = 0, rampCount = ramps.length;
+
+    world.bodies.forEach(b => {
+        // Remove objects that fall off-screen
+        if (!b.isStatic && (b.position.y > canvas.height + 100 || b.position.y < -100 || b.position.x < -100 || b.position.x > canvas.width + 100)) {
+            if (!b.removed) {
+                Composite.remove(world, b);
+                b.removed = true;
+            }
+        } else {
+            if (b.label === "Circle Body") circles++;
+            else if (b.label === "Rectangle Body" && !ramps.includes(b)) squares++;
+        }
+    });
+
+    counterEl.innerHTML = `Circles: ${circles}<br>Squares: ${squares}<br>Ramps: ${rampCount}`;
+}
+
 // Spawn shapes
 function spawn(type) {
     const x = Math.random() * (canvas.width - 100) + 50;
@@ -135,6 +143,7 @@ function spawn(type) {
         ramps.push(body);
     }
     World.add(world, body);
+    updateCounter();
 }
 
 // Gravity control
@@ -153,25 +162,43 @@ function resetWorld() {
     World.add(world, walls);
     World.add(world, mouseConstraint);
     ramps.length = 0;
+    updateCounter();
 }
 
-// Custom dragging for ramps
-let draggingRamp = null;
+// Drag/Rotate logic
+let selectedObj = null;
 Events.on(mouseConstraint, "mousedown", (e) => {
     const mousePos = e.mouse.position;
-    ramps.forEach(ramp => {
-        if (Matter.Bounds.contains(ramp.bounds, mousePos)) {
-            draggingRamp = ramp;
-        }
-    });
-});
-Events.on(mouseConstraint, "mousemove", (e) => {
-    if (draggingRamp) {
-        Body.setPosition(draggingRamp, e.mouse.position);
-        Body.setAngle(draggingRamp, 25 * Math.PI / 180);
+    if (rotateMode) {
+        // Select first ramp or square under mouse
+        ramps.concat(world.bodies.filter(b => !ramps.includes(b) && (b.label === "Rectangle Body"))).forEach(obj => {
+            if (Matter.Bounds.contains(obj.bounds, mousePos)) {
+                selectedObj = obj;
+            }
+        });
+    } else {
+        // Only ramps move normally
+        ramps.forEach(ramp => {
+            if (Matter.Bounds.contains(ramp.bounds, mousePos)) {
+                selectedObj = ramp;
+            }
+        });
     }
 });
-Events.on(mouseConstraint, "mouseup", () => { draggingRamp = null; });
+
+Events.on(mouseConstraint, "mousemove", (e) => {
+    if (!selectedObj) return;
+    if (rotateMode) {
+        const dx = e.mouse.position.x - selectedObj.position.x;
+        const dy = e.mouse.position.y - selectedObj.position.y;
+        Body.setAngle(selectedObj, Math.atan2(dy, dx));
+    } else {
+        Body.setPosition(selectedObj, e.mouse.position);
+        Body.setAngle(selectedObj, 25 * Math.PI / 180);
+    }
+});
+
+Events.on(mouseConstraint, "mouseup", () => { selectedObj = null; });
 
 // Welcome message
 const username = localStorage.getItem("username") || "Guest";
@@ -179,71 +206,11 @@ const welcomeEl = document.getElementById("welcome");
 welcomeEl.innerText = `Welcome, ${username}`;
 setTimeout(() => { welcomeEl.style.opacity = 0; }, 3000);
 
-// --- Save/Load System ---
-function getSaveData() {
-  return Composite.allBodies(world).map(b => ({
-    label: b.label,
-    x: b.position.x,
-    y: b.position.y,
-    angle: b.angle,
-    isStatic: b.isStatic,
-    type: b.circleRadius ? "circle" : (b.bounds.max.x - b.bounds.min.x === 200 ? "ramp" : "square")
-  }));
-}
-
-function loadSaveData(data) {
-  resetWorld();
-  data.forEach(obj => {
-    if (obj.type === "circle") {
-      World.add(world, Bodies.circle(obj.x, obj.y, 30, { restitution: 0.7, render: { fillStyle: '#f39c12' } }));
-    } else if (obj.type === "square") {
-      World.add(world, Bodies.rectangle(obj.x, obj.y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } }));
-    } else if (obj.type === "ramp") {
-      const body = Bodies.rectangle(obj.x, obj.y, 200, 20, { isStatic: true, angle: 25*Math.PI/180, render: { fillStyle: '#2ecc71' } });
-      ramps.push(body);
-      World.add(world, body);
-    }
-  });
-}
-
-function saveSlot() {
-  const slotName = document.getElementById("slotName").value.trim();
-  if (!slotName) return alert("Please enter a slot name.");
-
-  let saves = JSON.parse(localStorage.getItem("saves")) || {};
-  saves[slotName] = getSaveData();
-  localStorage.setItem("saves", JSON.stringify(saves));
-  renderSlots();
-  document.getElementById("slotName").value = "";
-}
-
-function loadSlot(name) {
-  let saves = JSON.parse(localStorage.getItem("saves")) || {};
-  if (saves[name]) loadSaveData(saves[name]);
-}
-
-function deleteSlot(name) {
-  let saves = JSON.parse(localStorage.getItem("saves")) || {};
-  delete saves[name];
-  localStorage.setItem("saves", JSON.stringify(saves));
-  renderSlots();
-}
-
-function renderSlots() {
-  const slotsDiv = document.getElementById("slots");
-  slotsDiv.innerHTML = "";
-  let saves = JSON.parse(localStorage.getItem("saves")) || {};
-  Object.keys(saves).forEach(name => {
-    const div = document.createElement("div");
-    div.className = "slot";
-    div.innerHTML = `
-      <span onclick="loadSlot('${name}')">${name}</span>
-      <button class="delete-btn" onclick="deleteSlot('${name}')"><i class="fa-solid fa-trash"></i></button>
-    `;
-    slotsDiv.appendChild(div);
-  });
-}
-renderSlots();
+// Continuously update counter
+(function counterLoop() {
+    updateCounter();
+    requestAnimationFrame(counterLoop);
+})();
 </script>
 </body>
 </html>
