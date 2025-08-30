@@ -4,51 +4,65 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Interactive Physics Sandbox</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-  body { margin: 0; overflow: hidden; background: #111; color: #fff; font-family: sans-serif; }
+  body { 
+    margin: 0; 
+    overflow: hidden; 
+    background: #f9f9f9; 
+    color: #222; 
+    font-family: Arial, sans-serif; 
+  }
   #ui {
     position: absolute; top: 10px; left: 10px;
-    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px;
-    z-index: 5;
+    background: rgba(255,255,255,0.8); 
+    padding: 10px; 
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
   }
-  button, input { margin: 5px; padding: 5px; }
-  
-  /* Loading screen */
-  #loading {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: #111;
-    display: flex; justify-content: center; align-items: center;
-    color: white; font-size: 2em; font-weight: bold;
-    z-index: 10;
-    transition: opacity 0.6s ease;
+  button, input {
+    margin: 5px; padding: 6px 10px; border-radius: 5px;
+    border: 1px solid #ccc;
   }
-  #spinner {
-    border: 6px solid rgba(255,255,255,0.2);
-    border-top: 6px solid #3498db;
-    border-radius: 50%;
-    width: 60px; height: 60px;
-    animation: spin 1s linear infinite;
-    margin-right: 15px;
-  }
-  @keyframes spin { 100% { transform: rotate(360deg); } }
-
-  /* Welcome message */
+  button { cursor: pointer; }
+  button:hover { background: #eee; }
   #welcome {
     position: absolute;
-    top: 10px; right: 10px;
-    background: rgba(0,0,0,0.6);
-    padding: 10px 15px;
-    border-radius: 10px;
+    top: 20px; right: 20px;
     font-size: 1.2em;
-    z-index: 6;
+    background: rgba(255,255,255,0.9);
+    padding: 8px 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    opacity: 1;
+    transition: opacity 1s ease-out;
   }
+  #slots {
+    margin-top: 10px;
+    max-height: 150px;
+    overflow-y: auto;
+  }
+  .slot {
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+    background: #fff;
+    padding: 5px 10px;
+    margin: 3px 0;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  }
+  .slot span { flex: 1; }
+  .delete-btn {
+    background: none;
+    border: none;
+    color: #c0392b;
+    cursor: pointer;
+  }
+  .delete-btn:hover { color: #e74c3c; }
 </style>
 </head>
 <body>
-<div id="loading"><div id="spinner"></div> Loading New Blocks...</div>
-<div id="welcome" style="display:none;"></div>
-
 <canvas id="world"></canvas>
 <div id="ui">
   <button onclick="spawn('circle')">Spawn Circle</button>
@@ -57,24 +71,16 @@
   <button onclick="resetWorld()">Reset</button>
   <button onclick="toggleGravity()">Pause/Play Gravity</button>
   <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1" onchange="updateGravity(this.value)"></label>
+  <hr>
+  <input id="slotName" type="text" placeholder="Save slot name">
+  <button onclick="saveSlot()">Save</button>
+  <div id="slots"></div>
 </div>
+
+<div id="welcome"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script>
-window.addEventListener("load", () => {
-  setTimeout(() => {
-    const loading = document.getElementById("loading");
-    loading.style.opacity = "0";
-    setTimeout(() => loading.style.display = "none", 600);
-
-    // Show welcome message
-    const username = localStorage.getItem("username") || "Guest";
-    const welcomeBox = document.getElementById("welcome");
-    welcomeBox.innerText = `Welcome, ${username}!`;
-    welcomeBox.style.display = "block";
-  }, 1500); 
-});
-
 const { Engine, Render, Runner, World, Bodies, Body, Mouse, MouseConstraint, Events, Composite } = Matter;
 
 // Engine & world
@@ -89,7 +95,7 @@ canvas.height = window.innerHeight;
 const render = Render.create({
     canvas,
     engine,
-    options: { wireframes: false, background: '#111', width: canvas.width, height: canvas.height }
+    options: { wireframes: false, background: '#f9f9f9', width: canvas.width, height: canvas.height }
 });
 Render.run(render);
 Runner.run(Runner.create(), engine);
@@ -166,6 +172,78 @@ Events.on(mouseConstraint, "mousemove", (e) => {
     }
 });
 Events.on(mouseConstraint, "mouseup", () => { draggingRamp = null; });
+
+// Welcome message
+const username = localStorage.getItem("username") || "Guest";
+const welcomeEl = document.getElementById("welcome");
+welcomeEl.innerText = `Welcome, ${username}`;
+setTimeout(() => { welcomeEl.style.opacity = 0; }, 3000);
+
+// --- Save/Load System ---
+function getSaveData() {
+  return Composite.allBodies(world).map(b => ({
+    label: b.label,
+    x: b.position.x,
+    y: b.position.y,
+    angle: b.angle,
+    isStatic: b.isStatic,
+    type: b.circleRadius ? "circle" : (b.bounds.max.x - b.bounds.min.x === 200 ? "ramp" : "square")
+  }));
+}
+
+function loadSaveData(data) {
+  resetWorld();
+  data.forEach(obj => {
+    if (obj.type === "circle") {
+      World.add(world, Bodies.circle(obj.x, obj.y, 30, { restitution: 0.7, render: { fillStyle: '#f39c12' } }));
+    } else if (obj.type === "square") {
+      World.add(world, Bodies.rectangle(obj.x, obj.y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } }));
+    } else if (obj.type === "ramp") {
+      const body = Bodies.rectangle(obj.x, obj.y, 200, 20, { isStatic: true, angle: 25*Math.PI/180, render: { fillStyle: '#2ecc71' } });
+      ramps.push(body);
+      World.add(world, body);
+    }
+  });
+}
+
+function saveSlot() {
+  const slotName = document.getElementById("slotName").value.trim();
+  if (!slotName) return alert("Please enter a slot name.");
+
+  let saves = JSON.parse(localStorage.getItem("saves")) || {};
+  saves[slotName] = getSaveData();
+  localStorage.setItem("saves", JSON.stringify(saves));
+  renderSlots();
+  document.getElementById("slotName").value = "";
+}
+
+function loadSlot(name) {
+  let saves = JSON.parse(localStorage.getItem("saves")) || {};
+  if (saves[name]) loadSaveData(saves[name]);
+}
+
+function deleteSlot(name) {
+  let saves = JSON.parse(localStorage.getItem("saves")) || {};
+  delete saves[name];
+  localStorage.setItem("saves", JSON.stringify(saves));
+  renderSlots();
+}
+
+function renderSlots() {
+  const slotsDiv = document.getElementById("slots");
+  slotsDiv.innerHTML = "";
+  let saves = JSON.parse(localStorage.getItem("saves")) || {};
+  Object.keys(saves).forEach(name => {
+    const div = document.createElement("div");
+    div.className = "slot";
+    div.innerHTML = `
+      <span onclick="loadSlot('${name}')">${name}</span>
+      <button class="delete-btn" onclick="deleteSlot('${name}')"><i class="fa-solid fa-trash"></i></button>
+    `;
+    slotsDiv.appendChild(div);
+  });
+}
+renderSlots();
 </script>
 </body>
 </html>
