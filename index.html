@@ -1,128 +1,137 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Interactive Physics Sandbox</title>
-<style>
-  body { margin: 0; overflow: hidden; background: #111; color: #fff; font-family: sans-serif; }
-  #ui {
-    position: absolute; top: 10px; left: 10px;
-    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px;
-  }
-  button, input { margin: 5px; padding: 5px; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Modern Login/Signup</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      font-family: Arial, sans-serif;
+      margin: 0;
+    }
+    .container {
+      background: #fff;
+      padding: 2rem;
+      border-radius: 1rem;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      width: 320px;
+      animation: fadeIn 0.4s ease;
+    }
+    @keyframes fadeIn {
+      from {opacity: 0; transform: translateY(20px);} 
+      to {opacity: 1; transform: translateY(0);} 
+    }
+    h2 { text-align: center; margin-bottom: 1.5rem; }
+    input {
+      width: 100%;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+      border: 1px solid #ccc;
+      border-radius: 0.5rem;
+      outline: none;
+      transition: border 0.2s;
+    }
+    input:focus { border-color: #667eea; }
+    .btn {
+      width: 100%;
+      padding: 0.75rem;
+      margin-top: 1rem;
+      background: #667eea;
+      color: white;
+      font-weight: bold;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #5563d6; }
+    .error { color: red; font-size: 0.9rem; margin-top: 0.5rem; }
+    .toggle { text-align: center; margin-top: 1rem; cursor: pointer; color: #667eea; }
+    .password-wrapper {
+      position: relative;
+    }
+    .toggle-password {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
-<canvas id="world"></canvas>
-<div id="ui">
-  <button onclick="spawn('circle')">Spawn Circle</button>
-  <button onclick="spawn('square')">Spawn Square</button>
-  <button onclick="spawn('ramp')">Spawn Ramp</button>
-  <button onclick="resetWorld()">Reset</button>
-  <button onclick="toggleGravity()">Pause/Play Gravity</button>
-  <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1" onchange="updateGravity(this.value)"></label>
-</div>
+  <div class="container" id="form-container">
+    <h2 id="form-title">Sign Up</h2>
+    <input type="text" id="username" placeholder="Username" />
+    <div class="password-wrapper">
+      <input type="password" id="password" placeholder="Password" />
+      <span class="toggle-password" onclick="togglePassword()">👁️</span>
+    </div>
+    <input type="password" id="confirm" placeholder="Confirm Password" style="display:none;" />
+    <button class="btn" onclick="handleSubmit()">Sign Up</button>
+    <div class="error" id="error"></div>
+    <div class="toggle" onclick="toggleForm()">Already have an account? Log In</div>
+  </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-<script>
-const { Engine, Render, Runner, World, Bodies, Body, Mouse, MouseConstraint, Events, Composite } = Matter;
+  <script>
+    let isSignup = true;
+    let users = ["demo", "admin", "testuser"];
 
-// Engine & world
-const engine = Engine.create();
-const world = engine.world;
-
-// Canvas & render
-const canvas = document.getElementById('world');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-
-const render = Render.create({
-    canvas,
-    engine,
-    options: { wireframes: false, background: '#111', width: canvas.width, height: canvas.height }
-});
-Render.run(render);
-Runner.run(Runner.create(), engine);
-
-// Walls
-const walls = [
-    Bodies.rectangle(canvas.width/2, canvas.height+50, canvas.width, 100, { isStatic: true }),
-    Bodies.rectangle(canvas.width/2, -50, canvas.width, 100, { isStatic: true }),
-    Bodies.rectangle(-50, canvas.height/2, 100, canvas.height, { isStatic: true }),
-    Bodies.rectangle(canvas.width+50, canvas.height/2, 100, canvas.height, { isStatic: true })
-];
-World.add(world, walls);
-
-// Mouse
-const mouse = Mouse.create(canvas);
-const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
-World.add(world, mouseConstraint);
-
-// Keep track of ramps
-const ramps = [];
-
-// Spawn shapes
-function spawn(type) {
-    const x = Math.random() * (canvas.width - 100) + 50;
-    const y = 50;
-    let body;
-    if (type === 'circle') body = Bodies.circle(x, y, 30, { restitution: 0.7, render: { fillStyle: '#f39c12' } });
-    else if (type === 'square') body = Bodies.rectangle(x, y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } });
-    else if (type === 'ramp') {
-        const widthRamp = 200, heightRamp = 20;
-        const angle = 25 * Math.PI / 180;
-        // Ramps are static (don't move from physics)
-        body = Bodies.rectangle(x, y+100, widthRamp, heightRamp, { 
-            isStatic: true, 
-            angle: angle,
-            render: { fillStyle: '#2ecc71' }
-        });
-        ramps.push(body);
+    function toggleForm() {
+      isSignup = !isSignup;
+      document.getElementById("form-title").textContent = isSignup ? "Sign Up" : "Log In";
+      document.querySelector(".btn").textContent = isSignup ? "Sign Up" : "Log In";
+      document.getElementById("confirm").style.display = isSignup ? "block" : "none";
+      document.getElementById("error").textContent = "";
     }
-    World.add(world, body);
-}
 
-// Gravity control
-let gravityEnabled = true;
-function toggleGravity() {
-    gravityEnabled = !gravityEnabled;
-    engine.world.gravity.y = gravityEnabled ? parseFloat(document.getElementById('gravitySlider').value) : 0;
-}
-function updateGravity(value) {
-    if (gravityEnabled) engine.world.gravity.y = parseFloat(value);
-}
+    function handleSubmit() {
+      let username = document.getElementById("username").value.trim();
+      let password = document.getElementById("password").value.trim();
+      let confirm = document.getElementById("confirm").value.trim();
+      let errorBox = document.getElementById("error");
 
-// Reset world
-function resetWorld() {
-    Composite.clear(world, false);
-    World.add(world, walls);
-    World.add(world, mouseConstraint);
-    ramps.length = 0;
-}
+      if (!username || !password) {
+        errorBox.textContent = "Please fill out all fields.";
+        return;
+      }
 
-// Custom dragging for ramps
-let draggingRamp = null;
-
-Events.on(mouseConstraint, "mousedown", (e) => {
-    const mousePos = e.mouse.position;
-    ramps.forEach(ramp => {
-        if (Matter.Bounds.contains(ramp.bounds, mousePos)) {
-            draggingRamp = ramp;
+      if (isSignup) {
+        if (users.includes(username.toLowerCase())) {
+          errorBox.textContent = "This username has already been taken.";
+          return;
         }
-    });
-});
-
-Events.on(mouseConstraint, "mousemove", (e) => {
-    if (draggingRamp) {
-        Body.setPosition(draggingRamp, e.mouse.position);
-        Body.setAngle(draggingRamp, 25 * Math.PI / 180); // keep angle locked
+        if (password.length < 6) {
+          errorBox.textContent = "Password must be at least 6 characters.";
+          return;
+        }
+        if (password !== confirm) {
+          errorBox.textContent = "Passwords do not match.";
+          return;
+        }
+        users.push(username.toLowerCase());
+        alert("Account created! You can now log in.");
+        toggleForm();
+      } else {
+        if (!users.includes(username.toLowerCase())) {
+          errorBox.textContent = "No account with that username.";
+          return;
+        }
+        // Redirect to main.html after successful login
+        window.location.href = "main.html";
+      }
     }
-});
 
-Events.on(mouseConstraint, "mouseup", () => {
-    draggingRamp = null;
-});
-</script>
+    function togglePassword() {
+      let passField = document.getElementById("password");
+      passField.type = passField.type === "password" ? "text" : "password";
+    }
+  </script>
 </body>
 </html>
