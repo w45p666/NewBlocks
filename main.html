@@ -158,24 +158,27 @@ function updateCounter() {
     counterEl.innerHTML = `Circles: ${circles} | Squares: ${squaresCount} | Ramps: ${rampCount}`;
 }
 
-// Spawn shapes
+// Spawn shapes with fixed original size
 function spawn(type) {
     const x = Math.random() * (canvas.width - 100) + 50;
     const y = 50;
     let body;
-    if (type === 'circle') body = Bodies.circle(x, y, 30, { restitution: 0.7, render: { fillStyle: '#f39c12' } });
-    else if (type === 'square') {
-        body = Bodies.rectangle(x, y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } });
+    if (type === 'circle') {
+        const r = 30;
+        body = Bodies.circle(x, y, r, { restitution: 0.7, render: { fillStyle: '#f39c12' } });
+        body.originalRadius = r;
+    } else if (type === 'square') {
+        const w = 60, h = 60;
+        body = Bodies.rectangle(x, y, w, h, { restitution: 0.7, render: { fillStyle: '#3498db' } });
+        body.originalWidth = w;
+        body.originalHeight = h;
         squares.push(body);
-    }
-    else if (type === 'ramp') {
-        const widthRamp = 200, heightRamp = 20;
+    } else if (type === 'ramp') {
+        const w = 200, h = 20;
         const angle = 25 * Math.PI / 180;
-        body = Bodies.rectangle(x, y+100, widthRamp, heightRamp, { 
-            isStatic: true, 
-            angle: angle,
-            render: { fillStyle: '#2ecc71' }
-        });
+        body = Bodies.rectangle(x, y+100, w, h, { isStatic: true, angle: angle, render: { fillStyle: '#2ecc71' } });
+        body.originalWidth = w;
+        body.originalHeight = h;
         ramps.push(body);
     }
     World.add(world, body);
@@ -228,12 +231,13 @@ function saveProgress() {
     world.bodies.forEach(b => {
         if (!b.isStatic && !b.removed) {
             const type = (b.label === "Circle Body") ? "circle" : "square";
-            data.push({ type, x:b.position.x, y:b.position.y, angle:b.angle, radius:b.circleRadius||0, width:b.bounds.max.x-b.bounds.min.x, height:b.bounds.max.y-b.bounds.min.y });
+            data.push({ type, x:b.position.x, y:b.position.y, angle:b.angle, radius:b.originalRadius||0, width:b.originalWidth||0, height:b.originalHeight||0 });
         }
     });
-    ramps.forEach(r => data.push({ type:"ramp", x:r.position.x, y:r.position.y, angle:r.angle, width:r.bounds.max.x-r.bounds.min.x, height:r.bounds.max.y-r.bounds.min.y }));
+    ramps.forEach(r => data.push({ type:"ramp", x:r.position.x, y:r.position.y, angle:r.angle, width:r.originalWidth, height:r.originalHeight }));
     localStorage.setItem("sandboxData", JSON.stringify(data));
 }
+
 function loadProgress() {
     const dataStr = localStorage.getItem("sandboxData");
     if(!dataStr) return;
@@ -243,6 +247,9 @@ function loadProgress() {
         if(obj.type=="circle") body = Bodies.circle(obj.x,obj.y,obj.radius,{ restitution:0.7, render:{fillStyle:'#f39c12'} });
         else if(obj.type=="square"){ body = Bodies.rectangle(obj.x,obj.y,obj.width,obj.height,{ restitution:0.7, render:{fillStyle:'#3498db'} }); squares.push(body);}
         else if(obj.type=="ramp"){ body = Bodies.rectangle(obj.x,obj.y,obj.width,obj.height,{ isStatic:true, angle:obj.angle, render:{fillStyle:'#2ecc71'} }); ramps.push(body);}
+        if (obj.radius) body.originalRadius = obj.radius;
+        if (obj.width) body.originalWidth = obj.width;
+        if (obj.height) body.originalHeight = obj.height;
         World.add(world,body);
     });
 }
