@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Blocks - Interactive Physics</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(135deg, #1e3c72, #2a5298);
+      color: white;
+    }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.6);
+      padding: 10px;
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    }
+    #controls button, #controls input {
+      margin: 5px;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #controls button {
+      background: #4cafef;
+      color: white;
+    }
+    #controls button:hover {
+      background: #3797d3;
+    }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <button onclick="addBox()">Add Box</button>
+    <button onclick="addCircle()">Add Circle</button>
+    <button onclick="addRamp()">Add Ramp</button>
+    <button onclick="resetWorld()">Reset</button>
+    <br>
+    Gravity: <input type="range" id="gravity" min="-1" max="1" step="0.1" value="1" onchange="updateGravity()">
+    <button onclick="toggleGravity()">Pause/Play Gravity</button>
+  </div>
+
+  <canvas id="world"></canvas>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+  <script>
+    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Constraint, Composite, Body } = Matter;
+
+    const engine = Engine.create();
+    const world = engine.world;
+
+    const canvas = document.getElementById('world');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const render = Render.create({
+      canvas: canvas,
+      engine: engine,
+      options: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        wireframes: false,
+        background: 'transparent'
+      }
+    });
+
+    Render.run(render);
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    // Floor & walls
+    const ground = Bodies.rectangle(window.innerWidth/2, window.innerHeight-20, window.innerWidth, 40, { isStatic: true, render:{ fillStyle: "#222" } });
+    const leftWall = Bodies.rectangle(0, window.innerHeight/2, 40, window.innerHeight, { isStatic: true });
+    const rightWall = Bodies.rectangle(window.innerWidth, window.innerHeight/2, 40, window.innerHeight, { isStatic: true });
+    World.add(world, [ground, leftWall, rightWall]);
+
+    // Add box
+    function addBox() {
+      const box = Bodies.rectangle(Math.random()*window.innerWidth, 0, 60, 60, {
+        render: { fillStyle: "#4cafef" }
+      });
+      World.add(world, box);
+    }
+
+    // Add circle
+    function addCircle() {
+      const circle = Bodies.circle(Math.random()*window.innerWidth, 0, 30, {
+        render: { fillStyle: "#ff4081" }
+      });
+      World.add(world, circle);
+    }
+
+    // Add ramp (always at 25 degrees, draggable)
+    function addRamp() {
+      const ramp = Bodies.rectangle(300, 300, 200, 20, {
+        angle: Math.PI / 180 * -25,
+        isStatic: true,
+        render: { fillStyle: "#8bc34a" }
+      });
+      World.add(world, ramp);
+    }
+
+    // Reset world
+    function resetWorld() {
+      World.clear(world, false);
+      World.add(world, [ground, leftWall, rightWall]);
+    }
+
+    // Gravity control
+    function updateGravity() {
+      let g = parseFloat(document.getElementById('gravity').value);
+      engine.world.gravity.y = g;
+    }
+
+    let gravityPaused = false;
+    function toggleGravity() {
+      gravityPaused = !gravityPaused;
+      engine.world.gravity.y = gravityPaused ? 0 : parseFloat(document.getElementById('gravity').value);
+    }
+
+    // Mouse drag
+    const mouse = Mouse.create(render.canvas);
+    const mouseConstraint = MouseConstraint.create(engine, {
+      mouse: mouse,
+      constraint: {
+        stiffness: 0.2,
+        render: { visible: false }
+      }
+    });
+    World.add(world, mouseConstraint);
+
+    render.mouse = mouse;
+  </script>
+</body>
+</html>
