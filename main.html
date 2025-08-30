@@ -11,37 +11,49 @@
     background: #f0f2f5; 
     font-family: Arial, sans-serif; 
   }
-  #ui {
-    position: absolute; top: 10px; left: 10px;
-    background: rgba(255,255,255,0.95);
-    padding: 12px 15px;
-    border-radius: 14px;
+
+  /* Professional Top Bar */
+  #topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 20px;
+    z-index: 1000;
+    gap: 12px;
+  }
+
+  #topbar .left, #topbar .center, #topbar .right {
+    display: flex;
+    align-items: center;
     gap: 8px;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-    font-size: 0.95em;
   }
-  .button-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-  button {
-    padding: 8px 14px;
-    border-radius: 8px;
+
+  #topbar button {
+    padding: 6px 12px;
+    border-radius: 6px;
     border: 1px solid #ccc;
-    cursor: pointer;
     background: #fff;
+    cursor: pointer;
     transition: 0.2s;
   }
-  button:hover { background: #e0e0e0; }
-  input[type=range] { vertical-align: middle; }
-  #counter { margin-top: 4px; font-size: 0.95em; }
+  #topbar button:hover { background: #e0e0e0; }
+
+  #topbar input[type=range] { vertical-align: middle; }
+
+  #counter {
+    font-size: 0.95em;
+  }
+
   #welcome {
     position: absolute;
-    top: 130px; /* below bar */
-    left: 10px;
+    top: 60px; /* under top bar */
+    left: 20px;
     font-size: 1.2em;
     background: rgba(255,255,255,0.95);
     padding: 8px 15px;
@@ -49,42 +61,46 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     opacity: 1;
     transition: opacity 1s ease-out;
+    z-index: 500;
+  }
+
+  canvas {
+    display: block;
   }
 </style>
 </head>
 <body>
 <canvas id="world"></canvas>
 
-<div id="ui">
-  <div class="button-group">
+<!-- Professional Top Bar -->
+<div id="topbar">
+  <div class="left">
     <button onclick="spawn('circle')">Circle</button>
     <button onclick="spawn('square')">Square</button>
     <button onclick="spawn('ramp')">Ramp</button>
     <button onclick="resetWorld()">Reset</button>
   </div>
-  <div class="button-group">
+  <div class="center">
     <button onclick="toggleGravity()">Pause/Play Gravity</button>
     <button id="rotateModeBtn" onclick="toggleRotateMode()">Rotate Mode: OFF</button>
     <button id="deleteBtn" onclick="toggleDeleteMode()">Delete Mode: OFF</button>
-  </div>
-  <div class="button-group">
     <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1"></label>
+  </div>
+  <div class="right">
+    <div id="counter">Circles: 0 | Squares: 0 | Ramps: 0</div>
     <button onclick="logout()">Logout</button>
   </div>
-  <div id="counter">Circles: 0 | Squares: 0 | Ramps: 0</div>
 </div>
 
 <div id="welcome"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <script>
+// Matter.js setup
 const { Engine, Render, Runner, World, Bodies, Body, Mouse, MouseConstraint, Events, Composite } = Matter;
 
-// Engine & world
 const engine = Engine.create();
 const world = engine.world;
-
-// Canvas & render
 const canvas = document.getElementById('world');
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -111,25 +127,15 @@ const mouse = Mouse.create(canvas);
 const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
 World.add(world, mouseConstraint);
 
-// Keep track of ramps and squares
 const ramps = [];
 const squares = [];
 
-// Rotate mode
+// Rotate and Delete Modes
 let rotateMode = false;
-const rotateBtn = document.getElementById("rotateModeBtn");
-function toggleRotateMode() {
-    rotateMode = !rotateMode;
-    rotateBtn.innerText = `Rotate Mode: ${rotateMode ? 'ON' : 'OFF'}`;
-}
+function toggleRotateMode() { rotateMode = !rotateMode; document.getElementById("rotateModeBtn").innerText = `Rotate Mode: ${rotateMode ? 'ON' : 'OFF'}`; }
 
-// Delete mode
 let deleteMode = false;
-const deleteBtn = document.getElementById('deleteBtn');
-function toggleDeleteMode() {
-    deleteMode = !deleteMode;
-    deleteBtn.innerText = `Delete Mode: ${deleteMode ? 'ON' : 'OFF'}`;
-}
+function toggleDeleteMode() { deleteMode = !deleteMode; document.getElementById("deleteBtn").innerText = `Delete Mode: ${deleteMode ? 'ON' : 'OFF'}`; }
 
 // Delete objects on click
 canvas.addEventListener('mousedown', e => {
@@ -146,7 +152,7 @@ canvas.addEventListener('mousedown', e => {
     }
 });
 
-// Object counter
+// Counters
 const counterEl = document.getElementById("counter");
 function updateCounter() {
     let circles = 0, squaresCount = squares.length, rampCount = ramps.length;
@@ -166,7 +172,7 @@ function updateCounter() {
     counterEl.innerHTML = `Circles: ${circles} | Squares: ${squaresCount} | Ramps: ${rampCount}`;
 }
 
-// Spawn shapes with fixed original size
+// Spawn
 function spawn(type) {
     const x = Math.random() * (canvas.width - 100) + 50;
     const y = 50;
@@ -193,15 +199,13 @@ function spawn(type) {
     updateCounter();
 }
 
-// Gravity control
+// Gravity
 let gravityEnabled = true;
-function toggleGravity() {
-    gravityEnabled = !gravityEnabled;
-    engine.world.gravity.y = gravityEnabled ? parseFloat(document.getElementById('gravitySlider').value) : 0;
-}
+function toggleGravity() { gravityEnabled = !gravityEnabled; engine.world.gravity.y = gravityEnabled ? parseFloat(document.getElementById('gravitySlider').value) : 0; }
 function updateGravity(value) { if(gravityEnabled) engine.world.gravity.y = parseFloat(value); }
+document.getElementById('gravitySlider').addEventListener('input', e => updateGravity(e.target.value));
 
-// Reset world
+// Reset
 function resetWorld() {
     Composite.clear(world, false);
     World.add(world, walls);
@@ -211,14 +215,13 @@ function resetWorld() {
     updateCounter();
 }
 
-// Drag/Rotate logic (only ramps rotate)
+// Drag & Rotate ramps
 let selectedRamp = null;
 Events.on(mouseConstraint, "mousedown", (e) => {
     const mousePos = e.mouse.position;
     if (rotateMode) ramps.forEach(ramp => { if (Matter.Bounds.contains(ramp.bounds, mousePos)) selectedRamp = ramp; });
     else ramps.forEach(ramp => { if (Matter.Bounds.contains(ramp.bounds, mousePos)) selectedRamp = ramp; });
 });
-
 Events.on(mouseConstraint, "mousemove", (e) => {
     if (!selectedRamp) return;
     if (rotateMode) {
@@ -230,10 +233,9 @@ Events.on(mouseConstraint, "mousemove", (e) => {
         if (!selectedRamp.hasBeenRotated) Body.setAngle(selectedRamp, 25*Math.PI/180);
     }
 });
-
 Events.on(mouseConstraint, "mouseup", () => { if(selectedRamp && rotateMode) selectedRamp.hasBeenRotated = true; selectedRamp = null; });
 
-// --- Save & Load Functions ---
+// Save & Load
 function saveProgress() {
     const data = [];
     world.bodies.forEach(b => {
@@ -245,7 +247,6 @@ function saveProgress() {
     ramps.forEach(r => data.push({ type:"ramp", x:r.position.x, y:r.position.y, angle:r.angle, width:r.originalWidth, height:r.originalHeight }));
     localStorage.setItem("sandboxData", JSON.stringify(data));
 }
-
 function loadProgress() {
     const dataStr = localStorage.getItem("sandboxData");
     if(!dataStr) return;
@@ -261,12 +262,10 @@ function loadProgress() {
         World.add(world,body);
     });
 }
-
-// Load and save automatically
 window.addEventListener("load",()=>{loadProgress();updateCounter();});
 window.addEventListener("beforeunload",()=>{saveProgress();});
 
-// Welcome message
+// Welcome
 const username = localStorage.getItem("username") || "Guest";
 const welcomeEl = document.getElementById("welcome");
 welcomeEl.innerText = `Welcome, ${username}`;
@@ -275,9 +274,9 @@ setTimeout(()=>{welcomeEl.style.opacity=0;},3000);
 // Counter loop
 (function counterLoop(){ updateCounter(); requestAnimationFrame(counterLoop); })();
 
-// Logout function
+// Logout
 function logout() {
-    saveProgress();  
+    saveProgress();
     window.location.href = 'login.html';
 }
 </script>
