@@ -14,13 +14,17 @@
   }
   #ui {
     position: absolute; top: 10px; left: 10px;
-    background: rgba(255,255,255,0.8); 
+    background: rgba(255,255,255,0.9); 
     padding: 10px; 
     border-radius: 10px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
   }
   button, input {
-    margin: 5px; padding: 6px 10px; border-radius: 5px;
+    margin: 0; padding: 6px 10px; border-radius: 5px;
     border: 1px solid #ccc;
   }
   button { cursor: pointer; }
@@ -37,9 +41,9 @@
     transition: opacity 1s ease-out;
   }
   #counter {
-    margin-top: 8px;
+    margin-left: 10px;
     font-size: 0.95em;
-    line-height: 1.4;
+    line-height: 1.2;
   }
 </style>
 </head>
@@ -53,7 +57,7 @@
   <button onclick="toggleGravity()">Pause/Play Gravity</button>
   <button id="rotateModeBtn" onclick="toggleRotateMode()">Rotate Mode: OFF</button>
   <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1" onchange="updateGravity(this.value)"></label>
-  <div id="counter">Circles: 0<br>Squares: 0<br>Ramps: 0</div>
+  <div id="counter">Circles: 0 | Squares: 0 | Ramps: 0</div>
 </div>
 
 <div id="welcome"></div>
@@ -122,7 +126,7 @@ function updateCounter() {
         }
     });
 
-    counterEl.innerHTML = `Circles: ${circles}<br>Squares: ${squares}<br>Ramps: ${rampCount}`;
+    counterEl.innerHTML = `Circles: ${circles} | Squares: ${squares} | Ramps: ${rampCount}`;
 }
 
 // Spawn shapes
@@ -165,40 +169,35 @@ function resetWorld() {
     updateCounter();
 }
 
-// Drag/Rotate logic
-let selectedObj = null;
+// Drag/Rotate logic (only ramps rotate)
+let selectedRamp = null;
 Events.on(mouseConstraint, "mousedown", (e) => {
     const mousePos = e.mouse.position;
     if (rotateMode) {
-        // Select first ramp or square under mouse
-        ramps.concat(world.bodies.filter(b => !ramps.includes(b) && (b.label === "Rectangle Body"))).forEach(obj => {
-            if (Matter.Bounds.contains(obj.bounds, mousePos)) {
-                selectedObj = obj;
-            }
+        ramps.forEach(ramp => {
+            if (Matter.Bounds.contains(ramp.bounds, mousePos)) selectedRamp = ramp;
         });
     } else {
-        // Only ramps move normally
+        // Normal dragging
         ramps.forEach(ramp => {
-            if (Matter.Bounds.contains(ramp.bounds, mousePos)) {
-                selectedObj = ramp;
-            }
+            if (Matter.Bounds.contains(ramp.bounds, mousePos)) selectedRamp = ramp;
         });
     }
 });
 
 Events.on(mouseConstraint, "mousemove", (e) => {
-    if (!selectedObj) return;
+    if (!selectedRamp) return;
     if (rotateMode) {
-        const dx = e.mouse.position.x - selectedObj.position.x;
-        const dy = e.mouse.position.y - selectedObj.position.y;
-        Body.setAngle(selectedObj, Math.atan2(dy, dx));
+        const dx = e.mouse.position.x - selectedRamp.position.x;
+        const dy = e.mouse.position.y - selectedRamp.position.y;
+        Body.setAngle(selectedRamp, Math.atan2(dy, dx));
     } else {
-        Body.setPosition(selectedObj, e.mouse.position);
-        Body.setAngle(selectedObj, 25 * Math.PI / 180);
+        Body.setPosition(selectedRamp, e.mouse.position);
+        Body.setAngle(selectedRamp, 25 * Math.PI / 180);
     }
 });
 
-Events.on(mouseConstraint, "mouseup", () => { selectedObj = null; });
+Events.on(mouseConstraint, "mouseup", () => { selectedRamp = null; });
 
 // Welcome message
 const username = localStorage.getItem("username") || "Guest";
