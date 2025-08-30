@@ -1,145 +1,171 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>New Blocks - Interactive Physics</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
-      background: linear-gradient(135deg, #1e3c72, #2a5298);
-      color: white;
-    }
-    #controls {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: rgba(0,0,0,0.6);
-      padding: 10px;
-      border-radius: 10px;
-      box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-    }
-    #controls button, #controls input {
-      margin: 5px;
-      padding: 8px 12px;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    #controls button {
-      background: #4cafef;
-      color: white;
-    }
-    #controls button:hover {
-      background: #3797d3;
-    }
-    canvas { display: block; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Physics Sandbox</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #111; color: #fff; font-family: sans-serif; }
+  #ui {
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px;
+    z-index: 5;
+  }
+  button, input { margin: 5px; padding: 5px; }
+  
+  /* Loading screen */
+  #loading {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: #111;
+    display: flex; justify-content: center; align-items: center;
+    color: white; font-size: 2em; font-weight: bold;
+    z-index: 10;
+    transition: opacity 0.6s ease;
+  }
+  #spinner {
+    border: 6px solid rgba(255,255,255,0.2);
+    border-top: 6px solid #3498db;
+    border-radius: 50%;
+    width: 60px; height: 60px;
+    animation: spin 1s linear infinite;
+    margin-right: 15px;
+  }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+
+  /* Welcome message */
+  #welcome {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: rgba(0,0,0,0.6);
+    padding: 10px 15px;
+    border-radius: 10px;
+    font-size: 1.2em;
+    z-index: 6;
+  }
+</style>
 </head>
 <body>
-  <div id="controls">
-    <button onclick="addBox()">Add Box</button>
-    <button onclick="addCircle()">Add Circle</button>
-    <button onclick="addRamp()">Add Ramp</button>
-    <button onclick="resetWorld()">Reset</button>
-    <br>
-    Gravity: <input type="range" id="gravity" min="-1" max="1" step="0.1" value="1" onchange="updateGravity()">
-    <button onclick="toggleGravity()">Pause/Play Gravity</button>
-  </div>
+<div id="loading"><div id="spinner"></div> Loading New Blocks...</div>
+<div id="welcome" style="display:none;"></div>
 
-  <canvas id="world"></canvas>
+<canvas id="world"></canvas>
+<div id="ui">
+  <button onclick="spawn('circle')">Spawn Circle</button>
+  <button onclick="spawn('square')">Spawn Square</button>
+  <button onclick="spawn('ramp')">Spawn Ramp</button>
+  <button onclick="resetWorld()">Reset</button>
+  <button onclick="toggleGravity()">Pause/Play Gravity</button>
+  <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1" onchange="updateGravity(this.value)"></label>
+</div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
-  <script>
-    const { Engine, Render, Runner, World, Bodies, Mouse, MouseConstraint, Constraint, Composite, Body } = Matter;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<script>
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    const loading = document.getElementById("loading");
+    loading.style.opacity = "0";
+    setTimeout(() => loading.style.display = "none", 600);
 
-    const engine = Engine.create();
-    const world = engine.world;
+    // Show welcome message
+    const username = localStorage.getItem("username") || "Guest";
+    const welcomeBox = document.getElementById("welcome");
+    welcomeBox.innerText = `Welcome, ${username}!`;
+    welcomeBox.style.display = "block";
+  }, 1500); 
+});
 
-    const canvas = document.getElementById('world');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+const { Engine, Render, Runner, World, Bodies, Body, Mouse, MouseConstraint, Events, Composite } = Matter;
 
-    const render = Render.create({
-      canvas: canvas,
-      engine: engine,
-      options: {
-        width: window.innerWidth,
-        height: window.innerHeight,
-        wireframes: false,
-        background: 'transparent'
-      }
-    });
+// Engine & world
+const engine = Engine.create();
+const world = engine.world;
 
-    Render.run(render);
-    const runner = Runner.create();
-    Runner.run(runner, engine);
+// Canvas & render
+const canvas = document.getElementById('world');
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
-    // Floor & walls
-    const ground = Bodies.rectangle(window.innerWidth/2, window.innerHeight-20, window.innerWidth, 40, { isStatic: true, render:{ fillStyle: "#222" } });
-    const leftWall = Bodies.rectangle(0, window.innerHeight/2, 40, window.innerHeight, { isStatic: true });
-    const rightWall = Bodies.rectangle(window.innerWidth, window.innerHeight/2, 40, window.innerHeight, { isStatic: true });
-    World.add(world, [ground, leftWall, rightWall]);
+const render = Render.create({
+    canvas,
+    engine,
+    options: { wireframes: false, background: '#111', width: canvas.width, height: canvas.height }
+});
+Render.run(render);
+Runner.run(Runner.create(), engine);
 
-    // Add box
-    function addBox() {
-      const box = Bodies.rectangle(Math.random()*window.innerWidth, 0, 60, 60, {
-        render: { fillStyle: "#4cafef" }
-      });
-      World.add(world, box);
+// Walls
+const walls = [
+    Bodies.rectangle(canvas.width/2, canvas.height+50, canvas.width, 100, { isStatic: true }),
+    Bodies.rectangle(canvas.width/2, -50, canvas.width, 100, { isStatic: true }),
+    Bodies.rectangle(-50, canvas.height/2, 100, canvas.height, { isStatic: true }),
+    Bodies.rectangle(canvas.width+50, canvas.height/2, 100, canvas.height, { isStatic: true })
+];
+World.add(world, walls);
+
+// Mouse
+const mouse = Mouse.create(canvas);
+const mouseConstraint = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
+World.add(world, mouseConstraint);
+
+// Keep track of ramps
+const ramps = [];
+
+// Spawn shapes
+function spawn(type) {
+    const x = Math.random() * (canvas.width - 100) + 50;
+    const y = 50;
+    let body;
+    if (type === 'circle') body = Bodies.circle(x, y, 30, { restitution: 0.7, render: { fillStyle: '#f39c12' } });
+    else if (type === 'square') body = Bodies.rectangle(x, y, 60, 60, { restitution: 0.7, render: { fillStyle: '#3498db' } });
+    else if (type === 'ramp') {
+        const widthRamp = 200, heightRamp = 20;
+        const angle = 25 * Math.PI / 180;
+        body = Bodies.rectangle(x, y+100, widthRamp, heightRamp, { 
+            isStatic: true, 
+            angle: angle,
+            render: { fillStyle: '#2ecc71' }
+        });
+        ramps.push(body);
     }
+    World.add(world, body);
+}
 
-    // Add circle
-    function addCircle() {
-      const circle = Bodies.circle(Math.random()*window.innerWidth, 0, 30, {
-        render: { fillStyle: "#ff4081" }
-      });
-      World.add(world, circle);
-    }
+// Gravity control
+let gravityEnabled = true;
+function toggleGravity() {
+    gravityEnabled = !gravityEnabled;
+    engine.world.gravity.y = gravityEnabled ? parseFloat(document.getElementById('gravitySlider').value) : 0;
+}
+function updateGravity(value) {
+    if (gravityEnabled) engine.world.gravity.y = parseFloat(value);
+}
 
-    // Add ramp (always at 25 degrees, draggable)
-    function addRamp() {
-      const ramp = Bodies.rectangle(300, 300, 200, 20, {
-        angle: Math.PI / 180 * -25,
-        isStatic: true,
-        render: { fillStyle: "#8bc34a" }
-      });
-      World.add(world, ramp);
-    }
-
-    // Reset world
-    function resetWorld() {
-      World.clear(world, false);
-      World.add(world, [ground, leftWall, rightWall]);
-    }
-
-    // Gravity control
-    function updateGravity() {
-      let g = parseFloat(document.getElementById('gravity').value);
-      engine.world.gravity.y = g;
-    }
-
-    let gravityPaused = false;
-    function toggleGravity() {
-      gravityPaused = !gravityPaused;
-      engine.world.gravity.y = gravityPaused ? 0 : parseFloat(document.getElementById('gravity').value);
-    }
-
-    // Mouse drag
-    const mouse = Mouse.create(render.canvas);
-    const mouseConstraint = MouseConstraint.create(engine, {
-      mouse: mouse,
-      constraint: {
-        stiffness: 0.2,
-        render: { visible: false }
-      }
-    });
+// Reset world
+function resetWorld() {
+    Composite.clear(world, false);
+    World.add(world, walls);
     World.add(world, mouseConstraint);
+    ramps.length = 0;
+}
 
-    render.mouse = mouse;
-  </script>
+// Custom dragging for ramps
+let draggingRamp = null;
+Events.on(mouseConstraint, "mousedown", (e) => {
+    const mousePos = e.mouse.position;
+    ramps.forEach(ramp => {
+        if (Matter.Bounds.contains(ramp.bounds, mousePos)) {
+            draggingRamp = ramp;
+        }
+    });
+});
+Events.on(mouseConstraint, "mousemove", (e) => {
+    if (draggingRamp) {
+        Body.setPosition(draggingRamp, e.mouse.position);
+        Body.setAngle(draggingRamp, 25 * Math.PI / 180);
+    }
+});
+Events.on(mouseConstraint, "mouseup", () => { draggingRamp = null; });
+</script>
 </body>
 </html>
