@@ -8,55 +8,89 @@
   body { 
     margin: 0; 
     overflow: hidden; 
-    background: #f9f9f9; 
-    color: #222; 
+    background: #f0f2f5; 
     font-family: Arial, sans-serif; 
   }
   #ui {
     position: absolute; top: 10px; left: 10px;
-    background: rgba(255,255,255,0.9); 
+    background: rgba(255,255,255,0.95); 
     padding: 10px; 
-    border-radius: 10px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    border-radius: 12px;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 8px;
     flex-wrap: wrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
-  button, input {
-    margin: 0; padding: 6px 10px; border-radius: 5px;
+  button, input[type=range] {
+    padding: 6px 12px;
+    border-radius: 6px;
     border: 1px solid #ccc;
+    cursor: pointer;
+    transition: 0.2s;
+    background: #fff;
   }
-  button { cursor: pointer; }
-  button:hover { background: #eee; }
-  #welcome {
+  button:hover {
+    background: #e0e0e0;
+  }
+  #rotateModeBtn, #drawBtn {
+    position: relative;
+  }
+  #colorPalette {
+    display: none;
     position: absolute;
-    top: 70px; /* moved below bar */
-    left: 10px;
-    font-size: 1.2em;
-    background: rgba(255,255,255,0.9);
-    padding: 8px 15px;
-    border-radius: 8px;
+    top: 40px;
+    left: 0;
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 5px;
+    display: flex;
+    gap: 4px;
+    border-radius: 6px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-    opacity: 1;
-    transition: opacity 1s ease-out;
+  }
+  .colorSwatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 1px solid #999;
   }
   #counter {
     margin-left: 10px;
     font-size: 0.95em;
     line-height: 1.2;
   }
+  #welcome {
+    position: absolute;
+    top: 70px;
+    left: 10px;
+    font-size: 1.2em;
+    background: rgba(255,255,255,0.95);
+    padding: 8px 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    opacity: 1;
+    transition: opacity 1s ease-out;
+  }
 </style>
 </head>
 <body>
 <canvas id="world"></canvas>
 <div id="ui">
-  <button onclick="spawn('circle')">Spawn Circle</button>
-  <button onclick="spawn('square')">Spawn Square</button>
-  <button onclick="spawn('ramp')">Spawn Ramp</button>
+  <button onclick="spawn('circle')">Circle</button>
+  <button onclick="spawn('square')">Square</button>
+  <button onclick="spawn('ramp')">Ramp</button>
   <button onclick="resetWorld()">Reset</button>
   <button onclick="toggleGravity()">Pause/Play Gravity</button>
   <button id="rotateModeBtn" onclick="toggleRotateMode()">Rotate Mode: OFF</button>
+  <button id="drawBtn" onmouseover="showPalette()" onmouseout="hidePalette()">Draw</button>
+  <div id="colorPalette">
+    <div class="colorSwatch" style="background:#f39c12;" onclick="setDrawColor('#f39c12')"></div>
+    <div class="colorSwatch" style="background:#3498db;" onclick="setDrawColor('#3498db')"></div>
+    <div class="colorSwatch" style="background:#2ecc71;" onclick="setDrawColor('#2ecc71')"></div>
+    <div class="colorSwatch" style="background:#e74c3c;" onclick="setDrawColor('#e74c3c')"></div>
+  </div>
   <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1" onchange="updateGravity(this.value)"></label>
   <div id="counter">Circles: 0 | Squares: 0 | Ramps: 0</div>
 </div>
@@ -79,7 +113,7 @@ canvas.height = window.innerHeight;
 const render = Render.create({
     canvas,
     engine,
-    options: { wireframes: false, background: '#f9f9f9', width: canvas.width, height: canvas.height }
+    options: { wireframes: false, background: '#f0f2f5', width: canvas.width, height: canvas.height }
 });
 Render.run(render);
 Runner.run(Runner.create(), engine);
@@ -110,13 +144,38 @@ function toggleRotateMode() {
     rotateBtn.innerText = `Rotate Mode: ${rotateMode ? 'ON' : 'OFF'}`;
 }
 
+// Drawing mode
+let drawMode = false;
+let drawColor = '#f39c12';
+const drawBtn = document.getElementById('drawBtn');
+const colorPalette = document.getElementById('colorPalette');
+function showPalette() { colorPalette.style.display = 'flex'; drawMode = true; }
+function hidePalette() { colorPalette.style.display = 'none'; }
+function setDrawColor(color) { drawColor = color; }
+let isDrawing = false;
+let lastPos = null;
+
+canvas.addEventListener('mousedown', e => { if(drawMode) { isDrawing = true; lastPos = {x:e.offsetX, y:e.offsetY}; } });
+canvas.addEventListener('mousemove', e => {
+    if(drawMode && isDrawing) {
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = drawColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(lastPos.x, lastPos.y);
+        ctx.lineTo(e.offsetX, e.offsetY);
+        ctx.stroke();
+        lastPos = {x:e.offsetX, y:e.offsetY};
+    }
+});
+canvas.addEventListener('mouseup', e => { if(drawMode) isDrawing = false; });
+
 // Object counter
 const counterEl = document.getElementById("counter");
 function updateCounter() {
-    let circles = 0, squaresCount = 0, rampCount = ramps.length;
+    let circles = 0, squaresCount = squares.length, rampCount = ramps.length;
 
     world.bodies.forEach(b => {
-        // Remove objects that fall off-screen
         if (!b.isStatic && (b.position.y > canvas.height + 100 || b.position.y < -100 || b.position.x < -100 || b.position.x > canvas.width + 100)) {
             if (!b.removed) {
                 Composite.remove(world, b);
@@ -127,8 +186,6 @@ function updateCounter() {
             if (b.label === "Circle Body") circles++;
         }
     });
-
-    squaresCount = squares.length;
 
     counterEl.innerHTML = `Circles: ${circles} | Squares: ${squaresCount} | Ramps: ${rampCount}`;
 }
@@ -163,9 +220,7 @@ function toggleGravity() {
     gravityEnabled = !gravityEnabled;
     engine.world.gravity.y = gravityEnabled ? parseFloat(document.getElementById('gravitySlider').value) : 0;
 }
-function updateGravity(value) {
-    if (gravityEnabled) engine.world.gravity.y = parseFloat(value);
-}
+function updateGravity(value) { if(gravityEnabled) engine.world.gravity.y = parseFloat(value); }
 
 // Reset world
 function resetWorld() {
@@ -181,16 +236,8 @@ function resetWorld() {
 let selectedRamp = null;
 Events.on(mouseConstraint, "mousedown", (e) => {
     const mousePos = e.mouse.position;
-    if (rotateMode) {
-        ramps.forEach(ramp => {
-            if (Matter.Bounds.contains(ramp.bounds, mousePos)) selectedRamp = ramp;
-        });
-    } else {
-        // Normal dragging
-        ramps.forEach(ramp => {
-            if (Matter.Bounds.contains(ramp.bounds, mousePos)) selectedRamp = ramp;
-        });
-    }
+    if (rotateMode) ramps.forEach(ramp => { if (Matter.Bounds.contains(ramp.bounds, mousePos)) selectedRamp = ramp; });
+    else ramps.forEach(ramp => { if (Matter.Bounds.contains(ramp.bounds, mousePos)) selectedRamp = ramp; });
 });
 
 Events.on(mouseConstraint, "mousemove", (e) => {
@@ -201,27 +248,49 @@ Events.on(mouseConstraint, "mousemove", (e) => {
         Body.setAngle(selectedRamp, Math.atan2(dy, dx));
     } else {
         Body.setPosition(selectedRamp, e.mouse.position);
-        // Only lock if ramp was never rotated manually
-        if (!selectedRamp.hasBeenRotated) Body.setAngle(selectedRamp, 25 * Math.PI / 180);
+        if (!selectedRamp.hasBeenRotated) Body.setAngle(selectedRamp, 25*Math.PI/180);
     }
 });
 
-Events.on(mouseConstraint, "mouseup", () => { 
-    if (selectedRamp && rotateMode) selectedRamp.hasBeenRotated = true;
-    selectedRamp = null; 
-});
+Events.on(mouseConstraint, "mouseup", () => { if(selectedRamp && rotateMode) selectedRamp.hasBeenRotated = true; selectedRamp = null; });
 
-// Welcome message under bar
+// --- Save & Load Functions ---
+function saveProgress() {
+    const data = [];
+    world.bodies.forEach(b => {
+        if (!b.isStatic && !b.removed) {
+            const type = (b.label === "Circle Body") ? "circle" : "square";
+            data.push({ type, x:b.position.x, y:b.position.y, angle:b.angle, radius:b.circleRadius||0, width:b.bounds.max.x-b.bounds.min.x, height:b.bounds.max.y-b.bounds.min.y });
+        }
+    });
+    ramps.forEach(r => data.push({ type:"ramp", x:r.position.x, y:r.position.y, angle:r.angle, width:r.bounds.max.x-r.bounds.min.x, height:r.bounds.max.y-r.bounds.min.y }));
+    localStorage.setItem("sandboxData", JSON.stringify(data));
+}
+function loadProgress() {
+    const dataStr = localStorage.getItem("sandboxData");
+    if(!dataStr) return;
+    const data = JSON.parse(dataStr);
+    data.forEach(obj => {
+        let body;
+        if(obj.type=="circle") body = Bodies.circle(obj.x,obj.y,obj.radius,{ restitution:0.7, render:{fillStyle:'#f39c12'} });
+        else if(obj.type=="square"){ body = Bodies.rectangle(obj.x,obj.y,obj.width,obj.height,{ restitution:0.7, render:{fillStyle:'#3498db'} }); squares.push(body);}
+        else if(obj.type=="ramp"){ body = Bodies.rectangle(obj.x,obj.y,obj.width,obj.height,{ isStatic:true, angle:obj.angle, render:{fillStyle:'#2ecc71'} }); ramps.push(body);}
+        World.add(world,body);
+    });
+}
+
+// Load and save automatically
+window.addEventListener("load",()=>{loadProgress();updateCounter();});
+window.addEventListener("beforeunload",()=>{saveProgress();});
+
+// Welcome message
 const username = localStorage.getItem("username") || "Guest";
 const welcomeEl = document.getElementById("welcome");
 welcomeEl.innerText = `Welcome, ${username}`;
-setTimeout(() => { welcomeEl.style.opacity = 0; }, 3000);
+setTimeout(()=>{welcomeEl.style.opacity=0;},3000);
 
-// Continuously update counter
-(function counterLoop() {
-    updateCounter();
-    requestAnimationFrame(counterLoop);
-})();
+// Counter loop
+(function counterLoop(){ updateCounter(); requestAnimationFrame(counterLoop); })();
 </script>
 </body>
 </html>
