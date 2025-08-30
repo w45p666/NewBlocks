@@ -46,9 +46,8 @@ Render.run(render);
 Runner.run(Runner.create(), engine);
 
 // Walls
-const floorHeight = 100;
 const walls = [
-    Bodies.rectangle(canvas.width/2, canvas.height + floorHeight/2, canvas.width, floorHeight, { isStatic: true }),
+    Bodies.rectangle(canvas.width/2, canvas.height+50, canvas.width, 100, { isStatic: true }),
     Bodies.rectangle(canvas.width/2, -50, canvas.width, 100, { isStatic: true }),
     Bodies.rectangle(-50, canvas.height/2, 100, canvas.height, { isStatic: true }),
     Bodies.rectangle(canvas.width+50, canvas.height/2, 100, canvas.height, { isStatic: true })
@@ -73,13 +72,11 @@ function spawn(type) {
     else if (type === 'ramp') {
         const widthRamp = 200, heightRamp = 20;
         const angle = 25 * Math.PI / 180;
+        // Ramps are static (don't move from physics)
         body = Bodies.rectangle(x, y+100, widthRamp, heightRamp, { 
-            mass: 1000, 
-            friction: 1, 
-            restitution: 0.1,
-            angle: angle, 
-            render: { fillStyle: '#2ecc71' },
-            plugin: { onFloor: false }
+            isStatic: true, 
+            angle: angle,
+            render: { fillStyle: '#2ecc71' }
         });
         ramps.push(body);
     }
@@ -104,32 +101,27 @@ function resetWorld() {
     ramps.length = 0;
 }
 
-// Keep ramps at 25 degrees and floor-lock
-Events.on(engine, 'beforeUpdate', () => {
-    const fixedAngle = 25 * Math.PI / 180;
+// Custom dragging for ramps
+let draggingRamp = null;
 
+Events.on(mouseConstraint, "mousedown", (e) => {
+    const mousePos = e.mouse.position;
     ramps.forEach(ramp => {
-        // Maintain angle
-        Body.setAngle(ramp, fixedAngle);
-        ramp.angularVelocity = 0;
-
-        // Detect if ramp is on the floor (simple approximation)
-        const floorY = canvas.height - floorHeight/2;
-        if (ramp.position.y + ramp.bounds.max.y - ramp.position.y >= floorY - 1 && !mouseConstraint.body || mouseConstraint.body !== ramp) {
-            Body.setVelocity(ramp, { x: 0, y: 0 });
-            Body.setPosition(ramp, { x: ramp.position.x, y: floorY - (ramp.bounds.max.y - ramp.position.y) });
+        if (Matter.Bounds.contains(ramp.bounds, mousePos)) {
+            draggingRamp = ramp;
         }
     });
 });
 
-// Resize
-window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    Body.setPosition(walls[0], { x: canvas.width/2, y: canvas.height + floorHeight/2 });
-    Body.setPosition(walls[1], { x: canvas.width/2, y: -50 });
-    Body.setPosition(walls[2], { x: -50, y: canvas.height/2 });
-    Body.setPosition(walls[3], { x: canvas.width+50, y: canvas.height/2 });
+Events.on(mouseConstraint, "mousemove", (e) => {
+    if (draggingRamp) {
+        Body.setPosition(draggingRamp, e.mouse.position);
+        Body.setAngle(draggingRamp, 25 * Math.PI / 180); // keep angle locked
+    }
+});
+
+Events.on(mouseConstraint, "mouseup", () => {
+    draggingRamp = null;
 });
 </script>
 </body>
