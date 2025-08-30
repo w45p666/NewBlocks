@@ -1,137 +1,193 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Modern Login/Signup</title>
-  <style>
-    body {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      font-family: Arial, sans-serif;
-      margin: 0;
-    }
-    .container {
-      background: #fff;
-      padding: 2rem;
-      border-radius: 1rem;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-      width: 320px;
-      animation: fadeIn 0.4s ease;
-    }
-    @keyframes fadeIn {
-      from {opacity: 0; transform: translateY(20px);} 
-      to {opacity: 1; transform: translateY(0);} 
-    }
-    h2 { text-align: center; margin-bottom: 1.5rem; }
-    input {
-      width: 100%;
-      padding: 0.75rem;
-      margin: 0.5rem 0;
-      border: 1px solid #ccc;
-      border-radius: 0.5rem;
-      outline: none;
-      transition: border 0.2s;
-    }
-    input:focus { border-color: #667eea; }
-    .btn {
-      width: 100%;
-      padding: 0.75rem;
-      margin-top: 1rem;
-      background: #667eea;
-      color: white;
-      font-weight: bold;
-      border: none;
-      border-radius: 0.5rem;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    .btn:hover { background: #5563d6; }
-    .error { color: red; font-size: 0.9rem; margin-top: 0.5rem; }
-    .toggle { text-align: center; margin-top: 1rem; cursor: pointer; color: #667eea; }
-    .password-wrapper {
-      position: relative;
-    }
-    .toggle-password {
-      position: absolute;
-      right: 10px;
-      top: 50%;
-      transform: translateY(-50%);
-      cursor: pointer;
-      color: #555;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login / Signup</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  body { 
+    font-family: Arial, sans-serif; 
+    background: linear-gradient(135deg, #2c3e50, #3498db);
+    display: flex; justify-content: center; align-items: center;
+    height: 100vh; margin: 0; 
+    color: white;
+  }
+  .container {
+    background: rgba(0,0,0,0.7);
+    padding: 20px 30px;
+    border-radius: 15px;
+    width: 340px;
+    text-align: center;
+    position: relative;
+    z-index: 2;
+  }
+  h2 { margin-bottom: 20px; }
+  .input-group {
+    position: relative;
+    width: 100%;
+  }
+  input {
+    width: 100%; padding: 10px; margin: 8px 0;
+    border: none; border-radius: 5px;
+  }
+  .toggle-password {
+    position: absolute;
+    right: 10px; top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #aaa;
+  }
+  button {
+    width: 100%; padding: 10px; margin-top: 10px;
+    border: none; border-radius: 5px;
+    background: #3498db; color: white; font-weight: bold;
+    cursor: pointer;
+  }
+  button:hover { background: #2980b9; }
+  .toggle-link {
+    margin-top: 15px;
+    display: block;
+    cursor: pointer;
+    color: #f39c12;
+    text-decoration: underline;
+  }
+  .message { margin-top: 10px; font-size: 0.9em; }
+
+  /* Loading Screen */
+  #loadingScreen {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #111;
+    color: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.5em;
+    z-index: 999;
+    display: none;
+  }
+
+  #confirmPasswordGroup { display: none; } /* Hidden unless Sign Up */
+</style>
 </head>
 <body>
-  <div class="container" id="form-container">
-    <h2 id="form-title">Sign Up</h2>
-    <input type="text" id="username" placeholder="Username" />
-    <div class="password-wrapper">
-      <input type="password" id="password" placeholder="Password" />
-      <span class="toggle-password" onclick="togglePassword()">👁️</span>
-    </div>
-    <input type="password" id="confirm" placeholder="Confirm Password" style="display:none;" />
-    <button class="btn" onclick="handleSubmit()">Sign Up</button>
-    <div class="error" id="error"></div>
-    <div class="toggle" onclick="toggleForm()">Already have an account? Log In</div>
+<div class="container">
+  <h2 id="form-title">Login</h2>
+  <input id="username" type="text" placeholder="Username">
+  
+  <div class="input-group">
+    <input id="password" type="password" placeholder="Password">
+    <i id="togglePass" class="fa-solid fa-eye toggle-password"></i>
   </div>
 
-  <script>
-    let isSignup = true;
-    let users = ["demo", "admin", "testuser"];
+  <!-- Confirm password (only for sign up) -->
+  <div class="input-group" id="confirmPasswordGroup">
+    <input id="confirmPassword" type="password" placeholder="Confirm Password">
+    <i id="toggleConfirmPass" class="fa-solid fa-eye toggle-password"></i>
+  </div>
+  
+  <button onclick="handleSubmit()">Login</button>
+  <span class="toggle-link" onclick="toggleForm()">Don’t have an account? Sign up</span>
+  <div class="message" id="message"></div>
+</div>
 
-    function toggleForm() {
-      isSignup = !isSignup;
-      document.getElementById("form-title").textContent = isSignup ? "Sign Up" : "Log In";
-      document.querySelector(".btn").textContent = isSignup ? "Sign Up" : "Log In";
-      document.getElementById("confirm").style.display = isSignup ? "block" : "none";
-      document.getElementById("error").textContent = "";
+<!-- Loading Screen -->
+<div id="loadingScreen">Loading...</div>
+
+<script>
+let isLogin = true;
+
+// Switch between login & signup
+function toggleForm() {
+  isLogin = !isLogin;
+  document.getElementById("form-title").innerText = isLogin ? "Login" : "Sign Up";
+  document.querySelector("button").innerText = isLogin ? "Login" : "Sign Up";
+  document.querySelector(".toggle-link").innerText = isLogin 
+    ? "Don’t have an account? Sign up" 
+    : "Already have an account? Log in";
+  document.getElementById("confirmPasswordGroup").style.display = isLogin ? "none" : "block";
+  document.getElementById("message").innerText = "";
+}
+
+// Handle login/signup
+function handleSubmit() {
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value.trim();
+  const confirmPassword = document.getElementById("confirmPassword").value.trim();
+  const messageBox = document.getElementById("message");
+
+  if (!username || !password || (!isLogin && !confirmPassword)) {
+    messageBox.innerText = "Please fill in all fields.";
+    messageBox.style.color = "red";
+    return;
+  }
+
+  // Load users from localStorage
+  let users = JSON.parse(localStorage.getItem("users")) || {};
+
+  if (isLogin) {
+    if (!users[username]) {
+      messageBox.innerText = "Account with this username doesn’t exist.";
+      messageBox.style.color = "red";
+      return;
     }
-
-    function handleSubmit() {
-      let username = document.getElementById("username").value.trim();
-      let password = document.getElementById("password").value.trim();
-      let confirm = document.getElementById("confirm").value.trim();
-      let errorBox = document.getElementById("error");
-
-      if (!username || !password) {
-        errorBox.textContent = "Please fill out all fields.";
-        return;
-      }
-
-      if (isSignup) {
-        if (users.includes(username.toLowerCase())) {
-          errorBox.textContent = "This username has already been taken.";
-          return;
-        }
-        if (password.length < 6) {
-          errorBox.textContent = "Password must be at least 6 characters.";
-          return;
-        }
-        if (password !== confirm) {
-          errorBox.textContent = "Passwords do not match.";
-          return;
-        }
-        users.push(username.toLowerCase());
-        alert("Account created! You can now log in.");
-        toggleForm();
-      } else {
-        if (!users.includes(username.toLowerCase())) {
-          errorBox.textContent = "No account with that username.";
-          return;
-        }
-        // Redirect to main.html after successful login
-        window.location.href = "main.html";
-      }
+    if (users[username] !== password) {
+      messageBox.innerText = "Incorrect password.";
+      messageBox.style.color = "red";
+      return;
     }
-
-    function togglePassword() {
-      let passField = document.getElementById("password");
-      passField.type = passField.type === "password" ? "text" : "password";
+    // Successful login
+    localStorage.setItem("username", username);
+    showLoading(() => {
+      window.location.href = "main.html";
+    });
+  } else {
+    if (users[username]) {
+      messageBox.innerText = "Username already taken.";
+      messageBox.style.color = "red";
+      return;
     }
-  </script>
+    if (password !== confirmPassword) {
+      messageBox.innerText = "Passwords do not match.";
+      messageBox.style.color = "red";
+      return;
+    }
+    if (password.length < 4) {
+      messageBox.innerText = "Password must be at least 4 characters.";
+      messageBox.style.color = "red";
+      return;
+    }
+    // Register new account
+    users[username] = password;
+    localStorage.setItem("users", JSON.stringify(users));
+    messageBox.innerText = "Account created successfully! Please log in.";
+    messageBox.style.color = "lightgreen";
+    toggleForm();
+  }
+}
+
+// Show loading screen
+function showLoading(callback) {
+  const loadingScreen = document.getElementById("loadingScreen");
+  loadingScreen.style.display = "flex";
+  setTimeout(callback, 1500);
+}
+
+// Password toggle
+function setupToggle(toggleId, inputId) {
+  const toggle = document.getElementById(toggleId);
+  const input = document.getElementById(inputId);
+  toggle.addEventListener("click", () => {
+    const type = input.getAttribute("type") === "password" ? "text" : "password";
+    input.setAttribute("type", type);
+    toggle.classList.toggle("fa-eye");
+    toggle.classList.toggle("fa-eye-slash");
+  });
+}
+
+setupToggle("togglePass", "password");
+setupToggle("toggleConfirmPass", "confirmPassword");
+</script>
 </body>
 </html>
