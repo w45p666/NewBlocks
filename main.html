@@ -33,29 +33,6 @@
   button:hover {
     background: #e0e0e0;
   }
-  #rotateModeBtn, #drawBtn {
-    position: relative;
-  }
-  #colorPalette {
-    display: none;
-    position: absolute;
-    top: 40px;
-    left: 0;
-    background: #fff;
-    border: 1px solid #ccc;
-    padding: 5px;
-    display: flex;
-    gap: 4px;
-    border-radius: 6px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-  }
-  .colorSwatch {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    cursor: pointer;
-    border: 1px solid #999;
-  }
   #counter {
     margin-left: 10px;
     font-size: 0.95em;
@@ -84,13 +61,7 @@
   <button onclick="resetWorld()">Reset</button>
   <button onclick="toggleGravity()">Pause/Play Gravity</button>
   <button id="rotateModeBtn" onclick="toggleRotateMode()">Rotate Mode: OFF</button>
-  <button id="drawBtn" onmouseover="showPalette()" onmouseout="hidePalette()">Draw</button>
-  <div id="colorPalette">
-    <div class="colorSwatch" style="background:#f39c12;" onclick="setDrawColor('#f39c12')"></div>
-    <div class="colorSwatch" style="background:#3498db;" onclick="setDrawColor('#3498db')"></div>
-    <div class="colorSwatch" style="background:#2ecc71;" onclick="setDrawColor('#2ecc71')"></div>
-    <div class="colorSwatch" style="background:#e74c3c;" onclick="setDrawColor('#e74c3c')"></div>
-  </div>
+  <button id="deleteBtn" onclick="toggleDeleteMode()">Delete Mode: OFF</button>
   <label>Gravity: <input id="gravitySlider" type="range" min="0" max="2" step="0.01" value="1" onchange="updateGravity(this.value)"></label>
   <div id="counter">Circles: 0 | Squares: 0 | Ramps: 0</div>
 </div>
@@ -144,31 +115,28 @@ function toggleRotateMode() {
     rotateBtn.innerText = `Rotate Mode: ${rotateMode ? 'ON' : 'OFF'}`;
 }
 
-// Drawing mode
-let drawMode = false;
-let drawColor = '#f39c12';
-const drawBtn = document.getElementById('drawBtn');
-const colorPalette = document.getElementById('colorPalette');
-function showPalette() { colorPalette.style.display = 'flex'; drawMode = true; }
-function hidePalette() { colorPalette.style.display = 'none'; }
-function setDrawColor(color) { drawColor = color; }
-let isDrawing = false;
-let lastPos = null;
+// Delete mode
+let deleteMode = false;
+const deleteBtn = document.getElementById('deleteBtn');
+function toggleDeleteMode() {
+    deleteMode = !deleteMode;
+    deleteBtn.innerText = `Delete Mode: ${deleteMode ? 'ON' : 'OFF'}`;
+}
 
-canvas.addEventListener('mousedown', e => { if(drawMode) { isDrawing = true; lastPos = {x:e.offsetX, y:e.offsetY}; } });
-canvas.addEventListener('mousemove', e => {
-    if(drawMode && isDrawing) {
-        const ctx = canvas.getContext('2d');
-        ctx.strokeStyle = drawColor;
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(lastPos.x, lastPos.y);
-        ctx.lineTo(e.offsetX, e.offsetY);
-        ctx.stroke();
-        lastPos = {x:e.offsetX, y:e.offsetY};
+// Delete objects on click
+canvas.addEventListener('mousedown', e => {
+    if (!deleteMode) return;
+    const mousePos = { x: e.offsetX, y: e.offsetY };
+    const allObjects = [...squares, ...ramps, ...world.bodies.filter(b => b.label === "Circle Body")];
+    for (let obj of allObjects) {
+        if (Matter.Bounds.contains(obj.bounds, mousePos)) {
+            Composite.remove(world, obj);
+            if (squares.includes(obj)) squares.splice(squares.indexOf(obj), 1);
+            if (ramps.includes(obj)) ramps.splice(ramps.indexOf(obj), 1);
+            break;
+        }
     }
 });
-canvas.addEventListener('mouseup', e => { if(drawMode) isDrawing = false; });
 
 // Object counter
 const counterEl = document.getElementById("counter");
